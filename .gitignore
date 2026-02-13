@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+venv311/
+.env
+
+# Build and Distribution
+build/
+dist/
+*.spec
+
+# PyInstaller
+*.manifest
+
+# IDE Settings
+.vscode/
+.idea/
+
+# Large Model Files (YOLO)
+*.pt
+*.onnx
+
+# OS Files
+Thumbs.db
+Desktop.ini
