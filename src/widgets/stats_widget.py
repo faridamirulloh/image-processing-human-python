@@ -77,7 +77,7 @@ class StatsWidget(QWidget):
             QFrame {
                 background-color: #1a1a2e;
                 border-radius: 6px;
-                padding: 6px;
+                padding: 2px;
             }
         """)
         

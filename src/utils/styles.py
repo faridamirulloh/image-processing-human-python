@@ -65,7 +65,10 @@ def get_button_style(color: str, hover_color: str) -> str:
             color: #000000;
             font-weight: bold;
             font-size: 14px;
-            padding: 8px 16px;
+            padding: 4px 8px 8px 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }}
         QPushButton:hover {{
             background-color: {hover_color};
@@ -89,6 +92,10 @@ def get_icon_button_style(color: str, hover_color: str) -> str:
             color: #ffffff;
             font-weight: bold;
             font-size: 18px;
+            padding: 4px 8px 8px 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }}
         QPushButton:hover {{
             background-color: {hover_color};

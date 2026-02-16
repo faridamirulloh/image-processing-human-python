@@ -19,8 +19,7 @@ from PyQt5.QtGui import QFont, QIcon
 from services import CameraService, VideoService, DetectorService, RecordingService
 from widgets import VideoWidget, StatsWidget
 from utils.constants import (
-    WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT,
-    YOLO_MODELS, DEFAULT_OUTPUT_FOLDER
+    WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT, YOLO_MODELS
 )
 from utils import styles
 
