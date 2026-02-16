@@ -1,5 +1,5 @@
 """
-Human Detection Application - Entry Point
+Aplikasi Deteksi Manusia - Entry Point
 """
 
 import sys
@@ -8,24 +8,24 @@ from PyQt5.QtCore import Qt
 
 
 def main():
-    """Main entry point for the application"""
-    # Enable high DPI scaling
+    """Titik masuk utama untuk aplikasi"""
+    # Aktifkan penskalaan DPI tinggi
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     
-    # Create application
+    # Buat aplikasi
     app = QApplication(sys.argv)
     app.setApplicationName("Human Detection App")
     app.setOrganizationName("HumanDetection")
     
-    # Import here to avoid circular imports
+    # Impor di sini untuk menghindari impor circular
     from app import MainWindow
     
-    # Create and show main window
+    # Buat dan tampilkan jendela utama
     window = MainWindow()
     window.show()
     
-    # Run event loop
+    # Jalankan loop event
     sys.exit(app.exec_())
 
 

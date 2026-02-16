@@ -1,6 +1,6 @@
 """
-Recording Service - Handles video recording and screenshot capture.
-Saves output files to a user-configurable output folder.
+Layanan Perekaman - Menangani perekaman video dan tangkapan layar.
+Menyimpan file output ke folder output yang dapat dikonfigurasi pengguna.
 """
 
 import os
@@ -14,8 +14,8 @@ from utils.constants import DEFAULT_OUTPUT_FOLDER, RECORDING_FPS, RECORDING_CODE
 
 class RecordingService:
     """
-    Service for recording video and capturing screenshots.
-    Output files are saved to a configurable folder with timestamped filenames.
+    Layanan untuk merekam video dan mengambil tangkapan layar.
+    File output disimpan ke folder yang dapat dikonfigurasi dengan nama file bertanggal.
     """
 
     def __init__(self, output_folder: str = DEFAULT_OUTPUT_FOLDER):
@@ -24,34 +24,34 @@ class RecordingService:
         self._is_recording = False
         self._current_file = ""
 
-        # Ensure output folder exists
+        # Pastikan folder output ada
         os.makedirs(self._output_folder, exist_ok=True)
 
     # -------------------------------------------------------------------------
-    # Output Folder Management
+    # Manajemen Folder Output
     # -------------------------------------------------------------------------
 
     def set_output_folder(self, path: str):
-        """Change the output folder and create it if needed."""
+        """Ubah folder output dan buat jika diperlukan."""
         self._output_folder = path
         os.makedirs(self._output_folder, exist_ok=True)
 
     def get_output_folder(self) -> str:
-        """Return the current output folder path."""
+        """Kembalikan path folder output saat ini."""
         return self._output_folder
 
     def open_output_folder(self):
-        """Open the output folder in the system file explorer."""
+        """Buka folder output di file explorer sistem."""
         os.makedirs(self._output_folder, exist_ok=True)
         os.startfile(self._output_folder)
 
     # -------------------------------------------------------------------------
-    # Video Recording
+    # Perekaman Video
     # -------------------------------------------------------------------------
 
     def start_recording(self, width: int, height: int) -> str:
         """
-        Start recording video to an .mp4 file.
+        Mulai merekam video ke file .mp4.
 
         Args:
             width: Frame width in pixels
@@ -63,12 +63,12 @@ class RecordingService:
         if self._is_recording:
             return self._current_file
 
-        # Generate timestamped filename
+        # Hasilkan nama file bertanggal
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"recording_{timestamp}.mp4"
         filepath = os.path.join(self._output_folder, filename)
 
-        # Create VideoWriter with configured codec and FPS
+        # Buat VideoWriter dengan codec dan FPS yang dikonfigurasi
         fourcc = cv2.VideoWriter_fourcc(*RECORDING_CODEC)
         self._writer = cv2.VideoWriter(filepath, fourcc, RECORDING_FPS, (width, height))
 
@@ -82,7 +82,7 @@ class RecordingService:
 
     def write_frame(self, frame: np.ndarray):
         """
-        Write a single frame to the active recording.
+        Tulis satu frame ke perekaman aktif.
 
         Args:
             frame: BGR frame from OpenCV (same format as camera output)
@@ -92,7 +92,7 @@ class RecordingService:
 
     def stop_recording(self) -> str:
         """
-        Stop the active recording and release the writer.
+        Hentikan perekaman aktif dan lepaskan perekam.
 
         Returns:
             Path to the saved recording file
@@ -108,16 +108,16 @@ class RecordingService:
         return saved_file
 
     def is_recording(self) -> bool:
-        """Check if a recording is currently active."""
+        """Periksa apakah perekaman sedang aktif."""
         return self._is_recording
 
     # -------------------------------------------------------------------------
-    # Screenshot Capture
+    # Tangkapan Layar
     # -------------------------------------------------------------------------
 
     def capture_screenshot(self, frame: np.ndarray) -> str:
         """
-        Save the current frame as a PNG screenshot.
+        Simpan frame saat ini sebagai screenshot PNG.
 
         Args:
             frame: BGR frame from OpenCV
@@ -128,7 +128,7 @@ class RecordingService:
         if frame is None:
             raise ValueError("No frame available to capture")
 
-        # Generate timestamped filename
+        # Hasilkan nama file bertanggal
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"capture_{timestamp}.png"
         filepath = os.path.join(self._output_folder, filename)
@@ -137,6 +137,6 @@ class RecordingService:
         return filepath
 
     def cleanup(self):
-        """Release any active resources."""
+        """Lepaskan sumber daya aktif apa pun."""
         if self._is_recording:
             self.stop_recording()

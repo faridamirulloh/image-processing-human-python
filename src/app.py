@@ -1,7 +1,7 @@
 """
-Main Application Window
-Real-time person detection and counting using YOLO models.
-Handles UI layout, camera management, recording, and detection orchestration.
+Aplikasi Utama
+Deteksi dan penghitungan orang secara real-time menggunakan model YOLO.
+Menangani tata letak UI, manajemen kamera, perekaman, dan proses deteksi.
 """
 
 import os
@@ -25,41 +25,41 @@ from utils import styles
 
 
 class MainWindow(QMainWindow):
-    """Main application window with camera preview, AI detection, and recording."""
+    """Aplikasi utama dengan pratinjau kamera, deteksi AI, dan perekaman."""
     
     def __init__(self):
         super().__init__()
         
-        # Core services
-        self._camera_service = CameraService()       # Scans for available cameras
-        self._video_service = VideoService()         # Captures frames in background thread
-        self._recording_service = RecordingService() # Saves video/screenshots to disk
-        self._detector_service = None                # YOLO model (pre-loaded after UI init)
+        # Layanan inti
+        self._camera_service = CameraService()       # Memindai kamera yang tersedia
+        self._video_service = VideoService()         # Menangkap frame di thread latar belakang
+        self._recording_service = RecordingService() # Menyimpan video/tangkapan layar ke disk
+        self._detector_service = None                # Model YOLO (dimuat sebelumnya setelah inisialisasi UI)
         
-        # State flags
-        self._is_running = False      # True while AI detection is active
-        self._is_previewing = False   # True while camera preview is active (no detection)
-        self._current_camera = 0      # Index of the currently selected camera
-        self._compact_mode = False    # True when window < 900px (show icon-only buttons)
+        # Bendera status
+        self._is_running = False      # True saat deteksi AI aktif
+        self._is_previewing = False   # True saat pratinjau kamera aktif (tanpa deteksi)
+        self._current_camera = 0      # Indeks kamera yang dipilih saat ini
+        self._compact_mode = False    # True saat jendela < 900px (tampilkan tombol ikon saja)
         
-        # FPS tracking (rolling average of detection processing times)
-        self._frame_times = deque(maxlen=30)  # Last 30 processing durations
-        self._last_fps_update = 0              # Throttle FPS display updates
+        # Pelacakan FPS (rata-rata waktu pemrosesan deteksi)
+        self._frame_times = deque(maxlen=30)   # 30 frame terakhir
+        self._last_fps_update = 0              # Batasi pembaruan tampilan FPS
         
-        # Build UI, wire signals, scan cameras, and pre-load the AI model
+        # Inisiasi UI, hubungkan sinyal, pindai kamera, dan load model AI
         self._init_ui()
         self._connect_signals()
         self._refresh_cameras()
         QTimer.singleShot(500, self._preload_model)
     
     def _init_ui(self):
-        """Build window layout: control bar, video panel, stats panel, status bar."""
-        # Window setup
+        """Tata letak window utama: bilah kontrol, panel video, panel statistik, bilah status."""
+        # Pengaturan window utama
         self.setWindowTitle(WINDOW_TITLE)
         self.setMinimumSize(640, 480)
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
         
-        # App icon (loaded from assets/)
+        # Icon aplikasi (dimuat dari assets/)
         icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
         
         self.setStyleSheet(styles.get_main_theme())
         
-        # Root layout
+        # Tata letak root
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
@@ -76,28 +76,28 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
         
-        # Top control bar (camera/model selectors + action buttons)
+        # Bilah kontrol atas (pemilih kamera/model + tombol tindakan)
         control_bar = self._create_control_bar()
         main_layout.addWidget(control_bar)
         
-        # Resizable split: video (left) + stats (right)
+        # Pemisah yang dapat diubah ukurannya: video (kiri) + statistik (kanan)
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(5)
         splitter.setStyleSheet(styles.get_splitter_handle_style())
         
-        # Left: live video feed
+        # Kiri: umpan video langsung
         self._video_widget = VideoWidget()
         splitter.addWidget(self._video_widget)
         
-        # Right: detection statistics
+        # Kanan: statistik deteksi
         self._stats_widget = StatsWidget()
         splitter.addWidget(self._stats_widget)
         
-        # Default split: 75% video, 25% stats
+        # Pemisahan default: 75% video, 25% statistik
         splitter.setSizes([750, 250])
         main_layout.addWidget(splitter)
         
-        # Bottom status bar
+        # Status bar bawah
         self._status_bar = QStatusBar()
 
         self._status_bar.setStyleSheet(styles.get_status_bar_style())
@@ -106,7 +106,7 @@ class MainWindow(QMainWindow):
     
 
     def _create_control_bar(self) -> QWidget:
-        """Build the top bar: camera selector, model selector, and action buttons."""
+        """Kontrol bar atas: pemilih kamera, pemilih model, dan tombol tindakan."""
         control_bar = QFrame()
         control_bar.setStyleSheet(styles.get_control_bar_style())
         control_bar.setMaximumHeight(55)
@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(12)
         
-        # 1. Refresh Button
+        # 1. Tombol Refresh
         self._refresh_btn = QPushButton("R")
         self._refresh_btn.setToolTip("Refresh camera list")
         self._refresh_btn.setFixedSize(32, 32)
@@ -134,22 +134,22 @@ class MainWindow(QMainWindow):
         """)
         layout.addWidget(self._refresh_btn)
         
-        # 2. Camera & Model Selectors
+        # 2. Pemilih Kamera & Model
         self._create_camera_controls(layout)
         
         layout.addStretch()
         
-        # 3. Recording Controls
+        # 3. Kontrol Perekaman
         self._create_recording_controls(layout)
         
-        # Vertical separator
+        # Pemisah vertikal
         separator = QFrame()
         separator.setFrameShape(QFrame.VLine)
         separator.setStyleSheet("color: #2d2d44;")
         separator.setFixedHeight(24)
         layout.addWidget(separator)
         
-        # 4. Start/Stop Buttons
+        # 4. Tombol Mulai/Berhenti
         self._start_btn = QPushButton("▶ Start")
         self._start_btn.setMinimumSize(32, 32)
         self._start_btn.setStyleSheet(styles.get_button_style("#00d9ff", "#00b8d9"))
@@ -164,8 +164,8 @@ class MainWindow(QMainWindow):
         return control_bar
 
     def _create_camera_controls(self, parent_layout: QHBoxLayout):
-        """Add camera and model dropdowns to the layout."""
-        # Camera dropdown
+        """Tambahkan dropdown kamera dan model ke tata letak."""
+        # Dropdown kamera
         camera_layout = QHBoxLayout()
         camera_layout.setSpacing(5)
         camera_label = QLabel("📷")
@@ -179,7 +179,7 @@ class MainWindow(QMainWindow):
         camera_layout.addWidget(self._camera_combo)
         parent_layout.addLayout(camera_layout)
         
-        # AI model dropdown
+        # Dropdown model AI
         model_layout = QHBoxLayout()
         model_layout.setSpacing(5)
         model_label = QLabel("🧠")
@@ -189,7 +189,7 @@ class MainWindow(QMainWindow):
         self._model_combo.setMinimumWidth(150)
         self._model_combo.setStyleSheet(styles.get_combo_style())
         
-        # Populate with available YOLO models
+        # Isi dengan model YOLO yang tersedia
         for model_name, info in YOLO_MODELS.items():
             self._model_combo.addItem(model_name)
             self._model_combo.setItemData(
@@ -203,8 +203,8 @@ class MainWindow(QMainWindow):
         parent_layout.addLayout(model_layout)
 
     def _create_recording_controls(self, parent_layout: QHBoxLayout):
-        """Add folder, screenshot, and record buttons to the layout."""
-        # Folder button
+        """Tambahkan tombol folder, tangkapan layar, dan rekam ke tata letak."""
+        # Tombol folder
         self._folder_btn = QPushButton("📂")
         self._folder_btn.setFixedSize(32, 32)
         self._folder_btn.setStyleSheet(styles.get_icon_button_style("#4a4a6a", "#5a5a7a"))
@@ -212,7 +212,7 @@ class MainWindow(QMainWindow):
         self._update_folder_tooltip()
         parent_layout.addWidget(self._folder_btn)
         
-        # Screenshot button
+        # Tombol screenshot
         self._capture_btn = QPushButton("📸")
         self._capture_btn.setToolTip("Capture screenshot")
         self._capture_btn.setFixedSize(32, 32)
@@ -220,7 +220,7 @@ class MainWindow(QMainWindow):
         self._capture_btn.setEnabled(False)
         parent_layout.addWidget(self._capture_btn)
         
-        # Record toggle button
+        # Tombol rekam
         self._record_btn = QPushButton("⏺ Record")
         self._record_btn.setToolTip("Start / stop video recording")
         self._record_btn.setMinimumSize(32, 32)
@@ -231,26 +231,26 @@ class MainWindow(QMainWindow):
 
     
     def _connect_signals(self):
-        """Wire widget signals to handler methods."""
-        # Control bar buttons
+        """Hubungkan sinyal widget ke metode penangan."""
+        # Tombol kontrol bar
         self._start_btn.clicked.connect(self._on_start)
         self._stop_btn.clicked.connect(self._on_stop)
         self._refresh_btn.clicked.connect(self._refresh_cameras)
         self._camera_combo.currentIndexChanged.connect(self._on_camera_changed)
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
         
-        # Recording & capture buttons
+        # Tombol rekam & screenshot
         self._folder_btn.clicked.connect(self._on_folder_open)
         self._folder_btn.customContextMenuRequested.connect(self._on_folder_select)
         self._capture_btn.clicked.connect(self._on_capture)
         self._record_btn.clicked.connect(self._on_record_toggle)
         
-        # Video capture callbacks
+        # Callback penangkapan video
         self._video_service.frame_ready.connect(self._on_frame_ready)
         self._video_service.error_occurred.connect(self._on_video_error)
     
     def _refresh_cameras(self):
-        """Scan for available cameras and populate the dropdown."""
+        """Pindai kamera yang tersedia dan isi dropdown."""
         self._status_bar.showMessage("Scanning for cameras...")
         
         cameras = self._camera_service.get_available_cameras()
@@ -264,23 +264,23 @@ class MainWindow(QMainWindow):
         else:
             for camera in cameras:
                 display_text = f"{camera['name']} ({camera['resolution'][0]}x{camera['resolution'][1]})"
-                # Store camera index as item data for later retrieval
+                # Simpan indeks kamera sebagai data item untuk pengambilan nanti
                 self._camera_combo.addItem(display_text, camera['index'])
             
             self._start_btn.setEnabled(True)
             self._status_bar.showMessage(f"Found {len(cameras)} camera(s)")
             
-            # Auto-open camera preview (detection not started yet)
+            # Buka preview kamera secara otomatis (deteksi belum dimulai)
             QTimer.singleShot(100, self._start_preview)
     
     def _on_camera_changed(self, index: int):
-        """Switch to newly selected camera, preserving the current mode (preview or detection)."""
+        """Beralih ke kamera yang baru dipilih, pertahankan mode saat ini (pratinjau atau deteksi)."""
         if index >= 0:
             camera_index = self._camera_combo.itemData(index)
             if camera_index is not None:
                 self._current_camera = camera_index
                 
-                # Stop current feed, then restart in the same mode
+                # Hentikan deteksi saat ini, lalu mulai ulang dalam mode yang sama
                 was_detecting = self._is_running
                 if self._is_running:
                     self._on_stop()
@@ -293,28 +293,28 @@ class MainWindow(QMainWindow):
                     QTimer.singleShot(200, self._start_preview)
     
     def _on_model_changed(self, model_name: str):
-        """Switch AI model. Warns user if selecting a heavier (slower) variant."""
-        # Show performance warning for non-nano models
+        """Ganti model AI. Peringatkan pengguna jika memilih varian yang lebih berat (lebih lambat)."""
+        # Tampilkan peringatan kinerja untuk model non-nano
         model_lower = model_name.lower()
         is_heavy = '- balanced' in model_lower or 's -' in model_lower
         
         if is_heavy:
             QMessageBox.warning(
                 self,
-                "Performance Warning",
-                f"⚠️ {model_name} is a heavier model.\n\n"
-                "This may result in slower performance on CPU.\n"
-                "For best results, use a 'Fast' (nano) model."
+                "Peringatan Performance",
+                f"⚠️ {model_name} adalah model yang lebih berat.\n\n"
+                "Ini dapat mengakibatkan kinerja yang lebih lambat pada CPU.\n"
+                "Untuk hasil terbaik, gunakan model 'Fast' (nano)."
             )
         
-        # Hot-swap model if detector is already loaded
+        # Tukar model secara langsung jika detektor sudah dimuat
         if self._detector_service is not None:
             self._detector_service.load_model(model_name, use_gpu=False)
             self._stats_widget.update_model(model_name)
             self._status_bar.showMessage(f"Loaded model: {model_name}")
     
     def _start_preview(self):
-        """Open camera feed (raw frames, no AI detection)."""
+        """Buka preview kamera (frame mentah, tanpa deteksi AI)."""
         if self._is_previewing or self._is_running:
             return
         
@@ -331,7 +331,7 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage("Camera preview - click Start for detection")
     
     def _preload_model(self):
-        """Pre-load AI model during startup so clicking Start is instant."""
+        """Load model AI saat startup agar klik Start instan."""
         if self._detector_service is None:
             model_name = self._model_combo.currentText()
             self._status_bar.showMessage("Pre-loading AI model...")
@@ -340,11 +340,11 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage("Camera preview - click Start for detection")
     
     def _stop_preview(self):
-        """Stop camera feed and release resources."""
+        """Hentikan preview kamera."""
         if not self._is_previewing:
             return
         
-        # Stop any active recording before closing camera
+        # Hentikan perekaman aktif apa pun sebelum menutup kamera
         if self._recording_service.is_recording():
             saved = self._recording_service.stop_recording()
             self._record_btn.setText("⏺ Record" if not self._compact_mode else "⏺")
@@ -358,20 +358,20 @@ class MainWindow(QMainWindow):
         self._video_widget.clear_display()
     
     def _on_start(self):
-        """Enable AI detection on the camera feed."""
+        """Aktifkan deteksi AI pada tampilan kamera."""
         if self._is_running:
             return
         
         self._status_bar.showMessage("Starting detection...")
         
-        # Load AI model if not already pre-loaded
+        # Muat model AI jika belum dimuat sebelumnya
         if self._detector_service is None:
             model_name = self._model_combo.currentText()
             self._status_bar.showMessage("Loading AI model...")
             self._detector_service = DetectorService(model_name, use_gpu=False)
             self._stats_widget.update_model(model_name)
         
-        # Open camera if preview isn't already running
+        # Buka kamera jika preview belum berjalan
         if not self._is_previewing:
             camera_index = self._camera_combo.currentData()
             if camera_index is None:
@@ -379,7 +379,7 @@ class MainWindow(QMainWindow):
             self._video_service.start_capture(camera_index)
             self._is_previewing = True
         
-        # Lock controls during detection
+        # Kunci kontrol selama deteksi
         self._is_running = True
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
@@ -391,18 +391,18 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage("Detection running...")
     
     def _on_stop(self):
-        """Stop AI detection but keep camera preview running."""
+        """Hentikan deteksi AI tetapi biarkan preview kamera tetap berjalan."""
         if not self._is_running:
             return
         
-        # Stop any active recording
+        # Hentikan perekaman aktif apa pun
         if self._recording_service.is_recording():
             saved = self._recording_service.stop_recording()
             self._record_btn.setText("⏺ Record" if not self._compact_mode else "⏺")
             self._record_btn.setStyleSheet(styles.get_button_style("#4a4a6a", "#ff4757"))
             self._status_bar.showMessage(f"Recording saved: {saved}")
         
-        # Unlock controls (camera stays open for preview)
+        # Buka kunci kontrol (kamera tetap terbuka untuk preview)
         self._is_running = False
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
@@ -414,14 +414,14 @@ class MainWindow(QMainWindow):
     
     def _on_frame_ready(self, frame: np.ndarray):
         """
-        Handle new frame from video service.
-        In preview mode: just display the raw frame.
-        In detection mode: run YOLO and display annotated frame.
+        Tangani frame baru dari layanan video.
+        Dalam mode preview: hanya tampilkan frame mentah.
+        Dalam mode deteksi: jalankan YOLO dan tampilkan frame terdeteksi.
         """
         if not self._is_previewing and not self._is_running:
             return
         
-        # When detection is active, run YOLO and overlay bounding boxes
+        # Saat deteksi aktif, jalankan YOLO dan overlay kotak pembatas
         if self._is_running and self._detector_service is not None:
             start_time = time.time()
             annotated_frame, person_count, detections = self._detector_service.detect_humans(frame)
@@ -441,21 +441,21 @@ class MainWindow(QMainWindow):
             display_frame = annotated_frame
             self._stats_widget.update_person_count(person_count)
         else:
-            # Preview only: display raw camera frame
+            # Preview saja: tampilkan frame kamera mentah
             display_frame = frame
         
-        # Append to recording if active
+        # Tambahkan ke perekaman jika aktif
         if self._recording_service.is_recording():
             self._recording_service.write_frame(display_frame)
         
         self._video_widget.update_frame(display_frame)
     
     def _on_video_error(self, error: str):
-        """Handle camera errors — show error message and reset UI."""
+        """Tangani kesalahan kamera — tampilkan pesan kesalahan dan atur ulang UI."""
         self._video_widget.show_error(error)
         self._status_bar.showMessage(f"Camera error: {error}")
         
-        # Reset all state flags and re-enable controls
+        # Atur ulang semua status dan aktifkan kembali kontrol
         self._is_previewing = False
         self._is_running = False
         self._start_btn.setEnabled(True)
@@ -466,24 +466,24 @@ class MainWindow(QMainWindow):
         self._on_stop()
     
     # =========================================================================
-    # Recording / Capture Handlers
+    # Penangan Perekaman / Screenshot
     # =========================================================================
     
     def _update_folder_tooltip(self):
-        """Refresh the folder button tooltip with the current output path."""
+        """Refresh tooltip tombol folder dengan path output saat ini."""
         path = self._recording_service.get_output_folder()
         self._folder_btn.setToolTip(
             f"📂 {path}\n\n"
-            "Left-click: Open folder in Explorer\n"
-            "Right-click: Select output folder"
+            "Klik kiri: Buka folder di Explorer\n"
+            "Klik kanan: Pilih folder output baru"
         )
     
     def _on_folder_open(self):
-        """Open the output folder in Windows Explorer."""
+        """Buka folder output di Windows Explorer."""
         self._recording_service.open_output_folder()
     
     def _on_folder_select(self, pos):
-        """Right-click context menu: pick a new output folder."""
+        """Menu konteks klik kanan: pilih folder output baru."""
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu {
@@ -497,13 +497,13 @@ class MainWindow(QMainWindow):
                 color: #000000;
             }
         """)
-        select_action = menu.addAction("📁 Select output folder...")
+        select_action = menu.addAction("📁 Pilih folder output...")
         action = menu.exec_(self._folder_btn.mapToGlobal(pos))
         
         if action == select_action:
             folder = QFileDialog.getExistingDirectory(
                 self,
-                "Select Output Folder",
+                "Pilih folder output",
                 self._recording_service.get_output_folder()
             )
             if folder:
@@ -512,28 +512,28 @@ class MainWindow(QMainWindow):
                 self._status_bar.showMessage(f"Output folder: {folder}")
     
     def _on_capture(self):
-        """Save the current displayed frame as a PNG screenshot."""
+        """Simpan frame yang ditampilkan saat ini sebagai screenshot PNG."""
         frame = self._video_widget._current_frame
         if frame is None:
-            self._status_bar.showMessage("No frame to capture")
+            self._status_bar.showMessage("Tidak ada frame untuk ditangkap")
             return
         
         try:
             path = self._recording_service.capture_screenshot(frame)
-            self._status_bar.showMessage(f"Screenshot saved: {path}")
+            self._status_bar.showMessage(f"Screenshot disimpan: {path}")
         except Exception as e:
-            self._status_bar.showMessage(f"Capture failed: {e}")
+            self._status_bar.showMessage(f"Screenshot gagal: {e}")
     
     def _on_record_toggle(self):
-        """Start or stop video recording."""
+        """Mulai atau hentikan perekaman video."""
         if self._recording_service.is_recording():
-            # Stop recording
+            # Hentikan perekaman
             saved = self._recording_service.stop_recording()
             self._record_btn.setText("⏺ Record" if not self._compact_mode else "⏺")
             self._record_btn.setStyleSheet(styles.get_button_style("#4a4a6a", "#ff4757"))
             self._status_bar.showMessage(f"Recording saved: {saved}")
         else:
-            # Start recording with current frame dimensions
+            # Mulai perekaman dengan dimensi frame saat ini
             frame = self._video_widget._current_frame
             if frame is None:
                 self._status_bar.showMessage("No frame available — start camera first")
@@ -549,13 +549,13 @@ class MainWindow(QMainWindow):
                 self._status_bar.showMessage(f"Record failed: {e}")
     
     # =========================================================================
-    # Window Events & Responsive Layout
+    # Window Events & Tata Letak Responsif
     # =========================================================================
     
     def _update_button_labels(self):
-        """Switch between icon-only (compact) and icon+text (normal) button labels."""
+        """Beralih antara label tombol hanya icon dan icon+teks (normal)."""
         if self._compact_mode:
-            # Compact: icons only with larger font
+            # hanya icon dengan font lebih besar
             icon_font = QFont()
             icon_font.setPixelSize(18)
             for btn in (self._record_btn, self._start_btn, self._stop_btn):
@@ -568,7 +568,7 @@ class MainWindow(QMainWindow):
             self._start_btn.setText("▶")
             self._stop_btn.setText("⏹")
         else:
-            # Normal: full text labels with standard font
+            # Normal: label teks lengkap dengan font standar
             default_font = QFont()
             default_font.setPixelSize(14)
             for btn in (self._record_btn, self._start_btn, self._stop_btn):
@@ -582,7 +582,7 @@ class MainWindow(QMainWindow):
             self._stop_btn.setText("⏹ Stop")
     
     def resizeEvent(self, event):
-        """Switch to compact layout when window width drops below 900px."""
+        """Beralih ke tata letak kompak saat lebar jendela turun di bawah 900px."""
         super().resizeEvent(event)
         compact = self.width() < 900
         if compact != self._compact_mode:
@@ -590,7 +590,7 @@ class MainWindow(QMainWindow):
             self._update_button_labels()
     
     def closeEvent(self, event):
-        """Clean up recording and camera resources on exit."""
+        """Bersihkan sumber daya perekaman dan kamera saat keluar."""
         self._recording_service.cleanup()
         if self._is_running or self._is_previewing:
             self._video_service.stop_capture()

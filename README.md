@@ -1,87 +1,86 @@
-# 📷 Human Detection & Counting App
+# 📷 Aplikasi Deteksi & Penghitungan Manusia
 
-A high-performance Windows desktop application for real-time human detection and counting using YOLO models (v8, v11, v12).
+Aplikasi desktop Windows berkinerja tinggi untuk deteksi dan penghitungan manusia secara real-time menggunakan model YOLO (v8, v11, v12).
 
-![App Icon](src/assets/icon.png)
+![Ikon Aplikasi](src/assets/icon.png)
 
-## ✨ Features
+## ✨ Fitur
 
-- **Real-time Detection**: Detects humans with high accuracy using state-of-the-art YOLO models.
-- **Multiple Camera Support**: Automatically scans and lists all connected webcams.
-- **Recording & Snapshots**: Record video clips (`.mp4`) or take screenshots (`.png`) with one click.
-- **Live Statistics**: Displays real-time FPS, person count, and active model info.
-- **Optimized for CPU**: Designed to run efficiently on standard CPUs without requiring a dedicated GPU.
+- **Deteksi Real-time**: Mendeteksi manusia dengan akurasi tinggi menggunakan model YOLO.
+- **Dukungan Banyak Kamera**: Memindai dan mencantumkan semua webcam yang terhubung secara otomatis.
+- **Perekaman & Snapshot**: Rekam klip video (`.mp4`) atau ambil tangkapan layar (`.png`) dengan satu klik.
+- **Statistik Langsung**: Menampilkan FPS, jumlah orang, dan info model aktif secara real-time.
+- **Dioptimalkan untuk CPU**: Dirancang untuk berjalan secara efisien pada CPU standar tanpa memerlukan GPU khusus.
 
-## 🚀 Quick Start
+## 🚀 Mulai Cepat
 
-### Prerequisites
-- **Windows 10 or 11** (64-bit)
-- **Python 3.11** (Strictly required)
+### Prasyarat
+- **Windows 10 atau 11** (64-bit)
+- **Python 3.11** (Wajib)
 
-### Installation
+### Instalasi
 
-1.  **Clone or Download** this repository.
-2.  **Run the automated setup script**:
+1.  **Clone atau Unduh** repositori ini.
+2.  **Jalankan skrip penyetelan otomatis**:
     ```powershell
     python run.py
     ```
-    *Note: The script will check your environment and tell you exactly what to do if dependencies are missing.*
+    *Catatan: Skrip akan memeriksa Environment Anda dan memberi tahu apa yang harus dilakukan jika ada dependensi yang hilang.*
 
-### Manual Setup (if needed)
+### Pengaturan Manual (jika diperlukan)
 
-If you prefer setting up manually:
+Jika Anda lebih suka mengatur secara manual:
 
-1.  **Create Virtual Environment**:
+1.  **Buat Virtual Environment**:
     ```powershell
     py -3.11 -m venv venv311
     .\venv311\Scripts\activate
     ```
 
-2.  **Install Dependencies**:
+2.  **Instal Dependensi**:
     ```powershell
     pip install -r requirements.txt
     ```
 
-3.  **Run the App**:
+3.  **Jalankan Aplikasi**:
     ```powershell
     python run.py
     ```
 
-## 🖥️ Usage Guide
+## 🖥️ Panduan Penggunaan
 
-1.  **Select Camera**: Use the dropdown list to choose your input camera.
-2.  **Select Model**:
-    *   **Nano (n)**: Fastest, recommended for most PCs.
-    *   **Small (s)**: More accurate, but requires a powerful CPU.
-3.  **Controls**:
-    *   **Start**: Begins AI detection.
-    *   **Stop**: Pauses detection (camera preview remains active).
-    *   **Record**: Toggles video recording to the output folder.
-    *   **Folder Icon**: Opens the directory where recordings are saved.
+1.  **Pilih Kamera**: Gunakan daftar drop-down untuk memilih kamera input Anda.
+2.  **Pilih Model**:
+    *   **Nano (n)**: Tercepat, direkomendasikan untuk sebagian besar PC.
+    *   **Kecil (s)**: Lebih akurat, tetapi membutuhkan CPU yang kuat.
+3.  **Kontrol**:
+    *   **Mulai**: Memulai deteksi AI.
+    *   **Berhenti**: Menjeda deteksi (pratinjau kamera tetap aktif).
+    *   **Rekam**: Mengalihkan perekaman video ke folder output.
+    *   **Ikon Folder**: Membuka direktori tempat rekaman disimpan.
 
-## 🛠️ Building the Executable
+## 🛠️ Membangun Executable
 
-To create a standalone `.exe` file for easy distribution:
+Untuk membuat file `.exe` mandiri agar mudah didistribusikan:
 
 ```powershell
 .\venv311\Scripts\activate
 python build.py
 ```
 
-The output file `HumanDetectionApp.exe` will appear in the `dist` folder.
+File output `HumanDetectionApp.exe` akan muncul di folder `dist`.
 
-## 📁 Project Structure
+## 📁 Struktur Proyek
 
-For a detailed explanation of the codebase and how it works, please see [CODE_OVERVIEW.md](CODE_OVERVIEW.md).
+Untuk penjelasan rinci tentang basis kode dan cara kerjanya, silakan lihat [CODE_OVERVIEW.md](CODE_OVERVIEW.md).
 
-## ❓ Troubleshooting
+## ❓ Pemecahan Masalah
 
-| Issue | Solution |
+| Masalah | Solusi |
 |-------|----------|
-| **"No module named..."** | Ensure you activated the virtual environment (`.\venv311\Scripts\activate`). |
-| **Camera not found** | Click the **"R"** (Refresh) button. Check if another app (Zoom/Teams) is using the camera. |
-| **Low FPS / Lag** | Switch to a **Nano** model (e.g., `YOLOv8n`). Ensure your laptop is plugged into power. |
-| **Model download fails** | Check your internet connection. The app downloads models automatically on first use. |
+| **"No module named..."** | Pastikan Anda mengaktifkan virtual environment (`.\venv311\Scripts\activate`). |
+| **Kamera tidak ditemukan** | Klik tombol **"R"** (Refresh). Periksa jika aplikasi lain (Zoom/Teams) sedang menggunakan kamera. |
+| **FPS Rendah / Lag** | Beralih ke model **Nano** (misalnya, `YOLOv8n`). Pastikan laptop Anda terhubung ke daya. |
 
-## ⚖️ License
-MIT License
+## ⚖️ Lisensi
+Lisensi MIT

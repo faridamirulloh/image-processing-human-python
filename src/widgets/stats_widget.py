@@ -1,6 +1,6 @@
 """
-Stats Widget - Displays real-time detection statistics.
-Shows person count, FPS, model info, and detection status.
+Widget Statistik - Menampilkan statistik deteksi real-time.
+Menampilkan jumlah orang, FPS, info model, dan status deteksi.
 """
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
@@ -10,8 +10,8 @@ from PyQt5.QtGui import QFont
 
 class StatsWidget(QWidget):
     """
-    Widget for displaying detection statistics.
-    Designed to be compact and responsive for the right sidebar.
+    Widget untuk menampilkan statistik deteksi.
+    Dirancang agar ringkas dan responsif untuk sidebar kanan.
     """
     
     def __init__(self, parent=None):
@@ -19,24 +19,24 @@ class StatsWidget(QWidget):
         self._init_ui()
     
     def _init_ui(self):
-        """Initialize the UI components"""
+        """Inisialisasi komponen UI"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
         
-        # Title
+        # Judul
         title = QLabel("📊 Statistics")
         title.setFont(QFont("Segoe UI", 12, QFont.Bold))
         title.setStyleSheet("color: #00d9ff;")
         layout.addWidget(title)
         
-        # Separator line
+        # Garis pemisah
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
         separator.setStyleSheet("background-color: #2d2d44;")
         layout.addWidget(separator)
         
-        # Stats cards
+        # Kartu statistik
         self._person_count_label = self._create_stat_card("👥 Persons", "0", "#00ff88")
         layout.addWidget(self._person_count_label)
         
@@ -49,9 +49,9 @@ class StatsWidget(QWidget):
         self._status_label = self._create_stat_card("📍 Status", "Stopped", "#8b8b8b")
         layout.addWidget(self._status_label)
         
-        layout.addStretch()  # Push cards to top
+        layout.addStretch()  # Dorong kartu ke atas
         
-        # Widget styling
+        # Gaya widget
         self.setStyleSheet("""
             StatsWidget {
                 background-color: #16213e;
@@ -62,15 +62,15 @@ class StatsWidget(QWidget):
     
     def _create_stat_card(self, title: str, value: str, color: str) -> QFrame:
         """
-        Create a statistics card with title and colored value display.
+        Buat kartu statistik dengan judul dan tampilan nilai berwarna.
         
         Args:
-            title: Card title
-            value: Initial value to display  
-            color: Color for the value text
+            title: Judul kartu
+            value: Nilai awal untuk ditampilkan
+            color: Warna untuk teks nilai
             
         Returns:
-            QFrame containing the stat card layout
+            QFrame berisi tata letak kartu statistik
         """
         card = QFrame()
         card.setStyleSheet("""
@@ -85,46 +85,46 @@ class StatsWidget(QWidget):
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(2)
         
-        # Title label (smaller, gray)
+        # Label judul (lebih kecil, abu-abu)
         title_label = QLabel(title)
         title_label.setFont(QFont("Segoe UI", 9))
         title_label.setStyleSheet("color: #8b8b8b;")
         layout.addWidget(title_label)
         
-        # Value label (larger, colored)
+        # Label nilai (lebih besar, berwarna)
         value_label = QLabel(value)
         value_label.setFont(QFont("Segoe UI", 18, QFont.Bold))
         value_label.setStyleSheet(f"color: {color};")
         value_label.setAlignment(Qt.AlignLeft)
         layout.addWidget(value_label)
         
-        # Store references for later updates
+        # Simpan referensi untuk pembaruan nanti
         card.value_label = value_label
         card.color = color
         
         return card
     
     def update_person_count(self, count: int):
-        """Update the person count display"""
+        """Perbarui tampilan jumlah orang"""
         self._person_count_label.value_label.setText(str(count))
     
     def update_fps(self, fps: float):
-        """Update the FPS display"""
+        """Perbarui tampilan FPS"""
         self._fps_label.value_label.setText(f"{fps:.1f}")
     
     def update_model(self, model: str):
-        """Update the model display (shows shortened model name)"""
+        """Perbarui tampilan model (menampilkan nama model yang dipersingkat)"""
         short_name = model.split(" - ")[0] if " - " in model else model
         self._model_label.value_label.setText(short_name)
     
     def update_status(self, status: str, is_active: bool = False):
-        """Update the status display with appropriate color"""
+        """Perbarui tampilan status dengan warna yang sesuai"""
         self._status_label.value_label.setText(status)
         color = "#00ff88" if is_active else "#8b8b8b"
         self._status_label.value_label.setStyleSheet(f"color: {color};")
     
     def reset_stats(self):
-        """Reset all statistics to default values"""
+        """Atur ulang semua statistik ke nilai default"""
         self.update_person_count(0)
         self.update_fps(0.0)
         self.update_status("Stopped", False)

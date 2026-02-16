@@ -1,6 +1,6 @@
 """
-Camera Service - Handles camera detection and enumeration.
-Scans for available cameras using multiple backends for Windows compatibility.
+Layanan Kamera - Menangani deteksi dan enumerasi kamera.
+Memindai kamera yang tersedia menggunakan beberapa backend untuk kompatibilitas Windows.
 """
 
 import cv2
@@ -11,8 +11,8 @@ from utils.constants import MAX_CAMERA_INDEX
 
 class CameraService:
     """
-    Service for detecting and listing available cameras.
-    Uses DirectShow and MSMF backends for better Windows compatibility.
+    Layanan untuk mendeteksi dan melihat kamera yang tersedia.
+    Menggunakan backend DirectShow dan MSMF untuk kompatibilitas Windows yang lebih baik.
     """
     
     def __init__(self):
@@ -20,15 +20,15 @@ class CameraService:
     
     def get_available_cameras(self) -> List[Dict]:
         """
-        Scan and return list of available cameras.
+        Pindai dan kembalikan daftar kamera yang tersedia.
         
         Returns:
-            List of dicts with camera info:
+            Daftar dict dengan info kamera:
             {'index': int, 'name': str, 'resolution': (width, height)}
         """
         cameras = []
         
-        # DirectShow and MSMF backends work best on Windows
+        # Backend DirectShow dan MSMF bekerja paling baik di Windows
         backends = [
             (cv2.CAP_DSHOW, "DirectShow"),
             (cv2.CAP_MSMF, "MSMF"),
@@ -43,10 +43,10 @@ class CameraService:
                         cap.release()
                         continue
                     
-                    # Brief warmup before reading
+                    # Pemanasan singkat sebelum membaca
                     time.sleep(0.1)
                     
-                    # Verify camera can actually capture frames
+                    # Verifikasi kamera benar-benar bisa menangkap frame
                     ret, frame = cap.read()
                     
                     if ret and frame is not None:
@@ -60,7 +60,7 @@ class CameraService:
                         })
                         
                         cap.release()
-                        break  # Found working camera, try next index
+                        break  # Ditemukan kamera yang berfungsi, coba indeks berikutnya
                     else:
                         cap.release()
                         
