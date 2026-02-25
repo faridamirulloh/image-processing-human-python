@@ -33,18 +33,18 @@ Jika Anda lebih suka mengatur secara manual:
 
 1.  **Buat Virtual Environment**:
     ```powershell
-    py -3.11 -m venv venv311
-    .\venv311\Scripts\activate
+    py -3.11 -m venv venv311 ## untuk menginisiasi virtual environment, program akan menggunakan python 3.11 dan menginstall semua dependensi yang dibutuhkan di dalam folder venv311, sehingga tidak akan mengganggu environment python yang sudah terinstall di sistem
+    .\venv311\Scripts\activate ## untuk mengaktifkan virtual environment
     ```
 
 2.  **Instal Dependensi**:
     ```powershell
-    pip install -r requirements.txt
+    pip install -r requirements.txt ## untuk menginstall semua dependensi yang dibutuhkan, 
     ```
 
 3.  **Jalankan Aplikasi**:
     ```powershell
-    python run.py
+    .\venv311\Scripts\python.exe run.py
     ```
 
 ## 🖥️ Panduan Penggunaan

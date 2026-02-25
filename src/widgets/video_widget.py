@@ -101,6 +101,10 @@ class VideoWidget(QLabel):
         """
         if frame is None:
             return
+        
+        # Hindari crash saat widget belum memiliki ukuran (saat layout awal)
+        if self.width() <= 0 or self.height() <= 0:
+            return
             
         self._current_frame = frame
         

@@ -133,7 +133,9 @@ class RecordingService:
         filename = f"capture_{timestamp}.png"
         filepath = os.path.join(self._output_folder, filename)
 
-        cv2.imwrite(filepath, frame)
+        success = cv2.imwrite(filepath, frame)
+        if not success:
+            raise RuntimeError(f"Gagal menyimpan screenshot ke: {filepath}")
         return filepath
 
     def cleanup(self):

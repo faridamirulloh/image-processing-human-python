@@ -6,6 +6,7 @@ Menangani tata letak UI, manajemen kamera, perekaman, dan proses deteksi.
 
 import os
 import time
+import traceback
 import numpy as np
 from collections import deque
 from PyQt5.QtWidgets import (
@@ -13,7 +14,7 @@ from PyQt5.QtWidgets import (
     QComboBox, QPushButton, QLabel, QFrame,
     QSplitter, QStatusBar, QMessageBox, QFileDialog, QMenu, QAction
 )
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon
 
 from services import CameraService, VideoService, DetectorService, RecordingService
@@ -22,6 +23,37 @@ from utils.constants import (
     WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT, YOLO_MODELS
 )
 from utils import styles
+
+
+# =============================================================================
+# Thread Pemuat Model — memuat YOLO di latar belakang agar UI tidak membeku
+# =============================================================================
+
+class ModelLoaderThread(QThread):
+    """Thread latar belakang untuk memuat model YOLO tanpa memblokir UI."""
+    
+    # Sinyal: (berhasil, nama_model, pesan_error)
+    model_loaded = pyqtSignal(bool, str, str)
+    
+    def __init__(self, model_name: str, parent=None):
+        super().__init__(parent)
+        self._model_name = model_name
+        self.detector_service = None
+    
+    def run(self):
+        """Muat model di thread terpisah."""
+        try:
+            self.detector_service = DetectorService(self._model_name, use_gpu=False)
+            
+            if self.detector_service.init_error:
+                self.model_loaded.emit(
+                    False, self._model_name,
+                    f"Model error: {self.detector_service.init_error}"
+                )
+            else:
+                self.model_loaded.emit(True, self._model_name, "")
+        except Exception as e:
+            self.model_loaded.emit(False, self._model_name, str(e))
 
 
 class MainWindow(QMainWindow):
@@ -34,11 +66,16 @@ class MainWindow(QMainWindow):
         self._camera_service = CameraService()       # Memindai kamera yang tersedia
         self._video_service = VideoService()         # Menangkap frame di thread latar belakang
         self._recording_service = RecordingService() # Menyimpan video/tangkapan layar ke disk
-        self._detector_service = None                # Model YOLO (dimuat sebelumnya setelah inisialisasi UI)
+        self._detector_service = None                # Model YOLO (dimuat di thread latar belakang)
+        
+        # Thread latar belakang (simpan referensi agar tidak di-garbage-collect)
+        self._model_loader_thread = None
+        self._camera_scan_thread = None
         
         # Bendera status
         self._is_running = False      # True saat deteksi AI aktif
         self._is_previewing = False   # True saat pratinjau kamera aktif (tanpa deteksi)
+        self._is_loading_model = False  # True saat model sedang dimuat di background
         self._current_camera = 0      # Indeks kamera yang dipilih saat ini
         self._compact_mode = False    # True saat jendela < 900px (tampilkan tombol ikon saja)
         
@@ -63,8 +100,6 @@ class MainWindow(QMainWindow):
         icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
-        
-
         
         self.setStyleSheet(styles.get_main_theme())
         
@@ -99,7 +134,6 @@ class MainWindow(QMainWindow):
         
         # Status bar bawah
         self._status_bar = QStatusBar()
-
         self._status_bar.setStyleSheet(styles.get_status_bar_style())
         self.setStatusBar(self._status_bar)
         self._status_bar.showMessage("Ready - Select a camera and click Start")
@@ -249,32 +283,60 @@ class MainWindow(QMainWindow):
         self._video_service.frame_ready.connect(self._on_frame_ready)
         self._video_service.error_occurred.connect(self._on_video_error)
     
+    # =========================================================================
+    # Pemindaian Kamera (sekarang non-blocking via thread)
+    # =========================================================================
+    
     def _refresh_cameras(self):
-        """Pindai kamera yang tersedia dan isi dropdown."""
-        self._status_bar.showMessage("Scanning for cameras...")
+        """Pindai kamera yang tersedia di thread latar belakang (tidak memblokir UI)."""
+        self._status_bar.showMessage("⏳ Scanning for cameras...")
+        self._refresh_btn.setEnabled(False)
         
-        cameras = self._camera_service.get_available_cameras()
+        # Gunakan pemindaian async agar UI tetap responsif
+        self._camera_scan_thread = self._camera_service.scan_async()
+        self._camera_scan_thread.cameras_found.connect(self._on_cameras_found)
+        self._camera_scan_thread.scan_error.connect(self._on_camera_scan_error)
+        self._camera_scan_thread.start()
+    
+    def _on_cameras_found(self, cameras: list):
+        """Tangani hasil pemindaian kamera dari thread latar belakang."""
+        self._refresh_btn.setEnabled(True)
         self._camera_combo.clear()
         
         if not cameras:
             self._camera_combo.addItem("No cameras found")
             self._start_btn.setEnabled(False)
             self._video_widget.show_no_camera()
-            self._status_bar.showMessage("No cameras detected")
+            self._status_bar.showMessage("⚠️ No cameras detected")
         else:
             for camera in cameras:
                 display_text = f"{camera['name']} ({camera['resolution'][0]}x{camera['resolution'][1]})"
-                # Simpan indeks kamera sebagai data item untuk pengambilan nanti
                 self._camera_combo.addItem(display_text, camera['index'])
             
             self._start_btn.setEnabled(True)
-            self._status_bar.showMessage(f"Found {len(cameras)} camera(s)")
+            self._status_bar.showMessage(f"✓ Found {len(cameras)} camera(s)")
             
-            # Buka preview kamera secara otomatis (deteksi belum dimulai)
+            # Buka preview kamera secara otomatis
             QTimer.singleShot(100, self._start_preview)
     
+    def _on_camera_scan_error(self, error: str):
+        """Tangani error pemindaian kamera."""
+        self._refresh_btn.setEnabled(True)
+        self._camera_combo.clear()
+        self._camera_combo.addItem("No cameras found")
+        self._start_btn.setEnabled(False)
+        self._video_widget.show_error(error)
+        self._status_bar.showMessage(f"⚠️ Camera scan failed: {error}")
+        
+        QMessageBox.warning(
+            self,
+            "Peringatan Kamera",
+            f"Gagal memindai kamera:\n\n{error}\n\n"
+            "Silakan periksa koneksi kamera dan coba klik Refresh."
+        )
+    
     def _on_camera_changed(self, index: int):
-        """Beralih ke kamera yang baru dipilih, pertahankan mode saat ini (pratinjau atau deteksi)."""
+        """Beralih ke kamera yang baru dipilih, pertahankan mode saat ini."""
         if index >= 0:
             camera_index = self._camera_combo.itemData(index)
             if camera_index is not None:
@@ -292,8 +354,12 @@ class MainWindow(QMainWindow):
                 else:
                     QTimer.singleShot(200, self._start_preview)
     
+    # =========================================================================
+    # Pemuatan Model (sekarang non-blocking via thread)
+    # =========================================================================
+    
     def _on_model_changed(self, model_name: str):
-        """Ganti model AI. Peringatkan pengguna jika memilih varian yang lebih berat (lebih lambat)."""
+        """Ganti model AI. Peringatkan pengguna jika memilih varian yang lebih berat."""
         # Tampilkan peringatan kinerja untuk model non-nano
         model_lower = model_name.lower()
         is_heavy = '- balanced' in model_lower or 's -' in model_lower
@@ -307,11 +373,62 @@ class MainWindow(QMainWindow):
                 "Untuk hasil terbaik, gunakan model 'Fast' (nano)."
             )
         
-        # Tukar model secara langsung jika detektor sudah dimuat
+        # Tukar model di thread latar belakang jika detektor sudah dimuat
         if self._detector_service is not None:
-            self._detector_service.load_model(model_name, use_gpu=False)
+            self._load_model_async(model_name)
+    
+    def _preload_model(self):
+        """Load model AI di thread latar belakang saat startup agar klik Start instan."""
+        if self._detector_service is None:
+            model_name = self._model_combo.currentText()
+            self._load_model_async(model_name)
+    
+    def _load_model_async(self, model_name: str):
+        """Muat model YOLO di thread latar belakang (tidak memblokir UI)."""
+        if self._is_loading_model:
+            self._status_bar.showMessage("⏳ Model masih dimuat, harap tunggu...")
+            return
+        
+        self._is_loading_model = True
+        self._start_btn.setEnabled(False)
+        self._model_combo.setEnabled(False)
+        self._status_bar.showMessage(f"⏳ Loading AI model: {model_name}...")
+        
+        self._model_loader_thread = ModelLoaderThread(model_name, self)
+        self._model_loader_thread.model_loaded.connect(self._on_model_loaded)
+        self._model_loader_thread.start()
+    
+    def _on_model_loaded(self, success: bool, model_name: str, error: str):
+        """Tangani hasil pemuatan model dari thread latar belakang."""
+        self._is_loading_model = False
+        self._model_combo.setEnabled(True)
+        
+        if success and self._model_loader_thread:
+            self._detector_service = self._model_loader_thread.detector_service
             self._stats_widget.update_model(model_name)
-            self._status_bar.showMessage(f"Loaded model: {model_name}")
+            
+            # Aktifkan kembali tombol Start jika ada kamera
+            if self._camera_combo.currentData() is not None:
+                self._start_btn.setEnabled(True)
+            
+            self._status_bar.showMessage(f"✓ Model loaded: {model_name}")
+        else:
+            # Aktifkan kembali Start jika sudah ada model sebelumnya
+            if self._detector_service is not None:
+                self._start_btn.setEnabled(True)
+            
+            self._status_bar.showMessage(f"⚠️ Failed to load model: {error}")
+            QMessageBox.warning(
+                self,
+                "Peringatan Model AI",
+                f"Gagal memuat model {model_name}:\n\n{error}\n\n"
+                "Deteksi mungkin tidak berfungsi. "
+                "Coba pilih model lain atau periksa file model."
+            )
+    
+    # =========================================================================
+    # Preview & Deteksi
+    # =========================================================================
     
     def _start_preview(self):
         """Buka preview kamera (frame mentah, tanpa deteksi AI)."""
@@ -329,15 +446,6 @@ class MainWindow(QMainWindow):
         self._capture_btn.setEnabled(True)
         self._record_btn.setEnabled(True)
         self._status_bar.showMessage("Camera preview - click Start for detection")
-    
-    def _preload_model(self):
-        """Load model AI saat startup agar klik Start instan."""
-        if self._detector_service is None:
-            model_name = self._model_combo.currentText()
-            self._status_bar.showMessage("Pre-loading AI model...")
-            self._detector_service = DetectorService(model_name, use_gpu=False)
-            self._stats_widget.update_model(model_name)
-            self._status_bar.showMessage("Camera preview - click Start for detection")
     
     def _stop_preview(self):
         """Hentikan preview kamera."""
@@ -362,13 +470,33 @@ class MainWindow(QMainWindow):
         if self._is_running:
             return
         
+        # Cegah start jika model masih loading
+        if self._is_loading_model:
+            self._status_bar.showMessage("⏳ Model masih dimuat, harap tunggu...")
+            return
+        
         self._status_bar.showMessage("Starting detection...")
         
         # Muat model AI jika belum dimuat sebelumnya
         if self._detector_service is None:
             model_name = self._model_combo.currentText()
             self._status_bar.showMessage("Loading AI model...")
+            
+            # Coba muat secara sinkron jika belum ada sama sekali
             self._detector_service = DetectorService(model_name, use_gpu=False)
+            
+            if self._detector_service.init_error:
+                error = self._detector_service.init_error
+                self._detector_service = None
+                self._status_bar.showMessage(f"⚠️ Model failed: {error}")
+                QMessageBox.warning(
+                    self,
+                    "Peringatan Model AI",
+                    f"Gagal memuat model {model_name}:\n\n{error}\n\n"
+                    "Deteksi tidak dapat dimulai."
+                )
+                return
+            
             self._stats_widget.update_model(model_name)
         
         # Buka kamera jika preview belum berjalan
@@ -424,7 +552,14 @@ class MainWindow(QMainWindow):
         # Saat deteksi aktif, jalankan YOLO dan overlay kotak pembatas
         if self._is_running and self._detector_service is not None:
             start_time = time.time()
-            annotated_frame, person_count, detections = self._detector_service.detect_humans(frame)
+            
+            try:
+                annotated_frame, person_count, detections = self._detector_service.detect_humans(frame)
+            except Exception as e:
+                # Tampilkan peringatan deteksi di status bar (jangan popup setiap frame)
+                self._status_bar.showMessage(f"⚠️ Detection error: {e}")
+                annotated_frame = frame
+                person_count = 0
             
             current_time = time.time()
             processing_time = current_time - start_time
@@ -453,9 +588,16 @@ class MainWindow(QMainWindow):
     def _on_video_error(self, error: str):
         """Tangani kesalahan kamera — tampilkan pesan kesalahan dan atur ulang UI."""
         self._video_widget.show_error(error)
-        self._status_bar.showMessage(f"Camera error: {error}")
+        self._status_bar.showMessage(f"⚠️ Camera error: {error}")
+        
+        # Hentikan perekaman aktif jika ada
+        if self._recording_service.is_recording():
+            saved = self._recording_service.stop_recording()
+            self._record_btn.setText("⏺ Record" if not self._compact_mode else "⏺")
+            self._record_btn.setStyleSheet(styles.get_button_style("#4a4a6a", "#ff4757"))
         
         # Atur ulang semua status dan aktifkan kembali kontrol
+        # (Tidak memanggil _on_stop() untuk menghindari bug double-reset)
         self._is_previewing = False
         self._is_running = False
         self._start_btn.setEnabled(True)
@@ -463,7 +605,16 @@ class MainWindow(QMainWindow):
         self._camera_combo.setEnabled(True)
         self._capture_btn.setEnabled(False)
         self._record_btn.setEnabled(False)
-        self._on_stop()
+        
+        self._stats_widget.update_status("Error", False)
+        self._stats_widget.reset_stats()
+        
+        QMessageBox.warning(
+            self,
+            "Peringatan Kamera",
+            f"Terjadi kesalahan kamera:\n\n{error}\n\n"
+            "Silakan periksa koneksi kamera dan coba klik Refresh."
+        )
     
     # =========================================================================
     # Penangan Perekaman / Screenshot
@@ -480,7 +631,15 @@ class MainWindow(QMainWindow):
     
     def _on_folder_open(self):
         """Buka folder output di Windows Explorer."""
-        self._recording_service.open_output_folder()
+        try:
+            self._recording_service.open_output_folder()
+        except Exception as e:
+            self._status_bar.showMessage(f"⚠️ Gagal membuka folder: {e}")
+            QMessageBox.warning(
+                self,
+                "Peringatan",
+                f"Gagal membuka folder output:\n\n{e}"
+            )
     
     def _on_folder_select(self, pos):
         """Menu konteks klik kanan: pilih folder output baru."""
@@ -515,14 +674,26 @@ class MainWindow(QMainWindow):
         """Simpan frame yang ditampilkan saat ini sebagai screenshot PNG."""
         frame = self._video_widget._current_frame
         if frame is None:
-            self._status_bar.showMessage("Tidak ada frame untuk ditangkap")
+            self._status_bar.showMessage("⚠️ Tidak ada frame untuk ditangkap")
+            QMessageBox.warning(
+                self,
+                "Peringatan Screenshot",
+                "Tidak ada frame aktif untuk ditangkap.\n"
+                "Pastikan kamera sedang berjalan."
+            )
             return
         
         try:
             path = self._recording_service.capture_screenshot(frame)
-            self._status_bar.showMessage(f"Screenshot disimpan: {path}")
+            self._status_bar.showMessage(f"✓ Screenshot disimpan: {path}")
         except Exception as e:
-            self._status_bar.showMessage(f"Screenshot gagal: {e}")
+            self._status_bar.showMessage(f"⚠️ Screenshot gagal: {e}")
+            QMessageBox.warning(
+                self,
+                "Peringatan Screenshot",
+                f"Gagal menyimpan screenshot:\n\n{e}\n\n"
+                "Periksa folder output dan ruang disk."
+            )
     
     def _on_record_toggle(self):
         """Mulai atau hentikan perekaman video."""
@@ -531,12 +702,18 @@ class MainWindow(QMainWindow):
             saved = self._recording_service.stop_recording()
             self._record_btn.setText("⏺ Record" if not self._compact_mode else "⏺")
             self._record_btn.setStyleSheet(styles.get_button_style("#4a4a6a", "#ff4757"))
-            self._status_bar.showMessage(f"Recording saved: {saved}")
+            self._status_bar.showMessage(f"✓ Recording saved: {saved}")
         else:
             # Mulai perekaman dengan dimensi frame saat ini
             frame = self._video_widget._current_frame
             if frame is None:
-                self._status_bar.showMessage("No frame available — start camera first")
+                self._status_bar.showMessage("⚠️ No frame available — start camera first")
+                QMessageBox.warning(
+                    self,
+                    "Peringatan Perekaman",
+                    "Tidak ada frame aktif untuk direkam.\n"
+                    "Pastikan kamera sedang berjalan."
+                )
                 return
             
             try:
@@ -546,7 +723,13 @@ class MainWindow(QMainWindow):
                 self._record_btn.setStyleSheet(styles.get_button_style("#ff4757", "#ff3344"))
                 self._status_bar.showMessage(f"Recording to: {path}")
             except Exception as e:
-                self._status_bar.showMessage(f"Record failed: {e}")
+                self._status_bar.showMessage(f"⚠️ Record failed: {e}")
+                QMessageBox.warning(
+                    self,
+                    "Peringatan Perekaman",
+                    f"Gagal memulai perekaman:\n\n{e}\n\n"
+                    "Periksa folder output dan ruang disk."
+                )
     
     # =========================================================================
     # Window Events & Tata Letak Responsif

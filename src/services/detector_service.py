@@ -1,7 +1,7 @@
 """
 Layanan Detektor - Deteksi Manusia YOLO
 Menyediakan deteksi orang berbasis AI menggunakan model YOLO (v8, v11, v12).
-Inferensi hanya CPU untuk kompatibilitas maksimum.
+Inferensi hanya CPU — dioptimalkan untuk menggunakan semua core CPU.
 """
 
 import os
@@ -57,17 +57,57 @@ class DetectorService:
         self._torch_available = False
         self._init_error: Optional[str] = None
         
-        # Periksa apakah PyTorch tersedia
+        # Periksa apakah PyTorch tersedia dan optimalkan CPU
         try:
             import torch
             self._torch_available = True
+            self._optimize_cpu()
         except Exception as e:
             self._init_error = str(e)
             print(f"Warning: PyTorch not available: {e}")
         
+        # Aktifkan optimisasi OpenCV (SSE, AVX, dll)
+        cv2.setUseOptimized(True)
+        
         # Muat model jika PyTorch tersedia
         if self._torch_available:
             self.load_model(model_name)
+    
+    def _optimize_cpu(self):
+        """
+        Optimalkan penggunaan CPU secara dinamis berdasarkan perangkat.
+        - Perangkat kuat (8+ core): gunakan semua core
+        - Perangkat sedang (4-7 core): sisakan 1 core untuk UI
+        - Perangkat lemah (1-3 core): sisakan 1 core untuk UI
+        """
+        import torch
+        
+        total_cores = os.cpu_count() or 2
+        
+        # Tentukan jumlah thread optimal berdasarkan jumlah core
+        if total_cores >= 8:
+            # Perangkat kuat — gunakan semua core, UI tetap lancar
+            infer_threads = total_cores
+        elif total_cores >= 4:
+            # Perangkat sedang — sisakan 1 core untuk UI + kamera
+            infer_threads = total_cores - 1
+        else:
+            # Perangkat lemah — minimal 1 thread untuk inferensi
+            infer_threads = max(1, total_cores - 1)
+        
+        # Terapkan konfigurasi thread PyTorch
+        torch.set_num_threads(infer_threads)
+        
+        try:
+            interop = max(1, total_cores // 4)  # 1 interop thread per 4 core
+            torch.set_num_interop_threads(interop)
+        except RuntimeError:
+            pass  # Sudah diatur sebelumnya
+        
+        print(
+            f"CPU optimization: {infer_threads}/{total_cores} cores for inference, "
+            f"torch threads={torch.get_num_threads()}"
+        )
     
     @property
     def torch_available(self) -> bool:

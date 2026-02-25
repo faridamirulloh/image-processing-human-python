@@ -86,6 +86,11 @@ class VideoService(QThread):
         Returns:
             True if capture thread started
         """
+        # Cegah crash jika thread sudah berjalan
+        if self.isRunning():
+            print("Warning: Capture thread already running, ignoring duplicate start")
+            return True
+        
         if camera_index is not None:
             self._camera_index = camera_index
             
@@ -94,14 +99,22 @@ class VideoService(QThread):
         return True
     
     def stop_capture(self):
-        """Hentikan penangkapan video dengan baik"""
+        """Hentikan penangkapan video dengan baik tanpa memblokir UI."""
         self._running = False
-        self.wait(2000)  # Tunggu hingga 2 detik agar thread selesai
         
-        # Jika thread selesai, itu sudah melepaskan kamera.
-        # Jika waktu habis, kami paksa rilis di sini.
+        # Tunggu thread selesai, dengan timeout yang aman
+        if self.isRunning():
+            if not self.wait(3000):  # Tunggu hingga 3 detik
+                print("Warning: Capture thread not responding, forcing termination")
+                self.terminate()  # Paksa hentikan hanya jika benar-benar macet
+                self.wait(500)
+        
+        # Pastikan kamera dilepaskan
         if self._capture is not None:
-            self._capture.release()
+            try:
+                self._capture.release()
+            except Exception:
+                pass
             self._capture = None
     
     def run(self):
@@ -122,7 +135,7 @@ class VideoService(QThread):
         # Kurangi ukuran buffer untuk latensi lebih rendah
         try:
             self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        except:
+        except Exception:
             pass  # Beberapa kamera tidak mendukung ini
         
         self.capture_started.emit()
