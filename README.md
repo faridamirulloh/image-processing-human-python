@@ -65,7 +65,7 @@ Untuk membuat file `.exe` mandiri agar mudah didistribusikan:
 
 ```powershell
 .\venv311\Scripts\activate
-python build.py
+.\venv311\Scripts\python.exe build.py
 ```
 
 File output `HumanDetectionApp.exe` akan muncul di folder `dist`.
