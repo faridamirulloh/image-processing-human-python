@@ -1,6 +1,6 @@
 """
-Video Service - Handles video capture from camera in a separate thread.
-Emits frames via PyQt signals for processing and display.
+Layanan Video - Menangani penangkapan video dari kamera di thread terpisah.
+Memancarkan frame melalui sinyal PyQt untuk pemrosesan dan tampilan.
 """
 
 import cv2
@@ -12,27 +12,27 @@ from PyQt5.QtCore import QThread, pyqtSignal, QMutex, QMutexLocker
 
 class VideoService(QThread):
     """
-    Video capture service running in a separate thread.
-    Emits frames for display and processing.
+    Layanan penangkapan video berjalan di thread terpisah.
+    Memancarkan frame untuk tampilan dan pemrosesan.
     """
     
-    # Signals for async communication with main thread
-    frame_ready = pyqtSignal(np.ndarray)  # Emits raw camera frame
-    error_occurred = pyqtSignal(str)       # Emits error message
-    capture_started = pyqtSignal()         # Emits when capture starts
+    # Sinyal untuk komunikasi asinkron dengan thread utama
+    frame_ready = pyqtSignal(np.ndarray)  # Memancarkan frame kamera mentah
+    error_occurred = pyqtSignal(str)       # Memancarkan pesan kesalahan
+    capture_started = pyqtSignal()         # Memancarkan saat penangkapan dimulai
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self._camera_index: int = 0
         self._capture: Optional[cv2.VideoCapture] = None
         self._running: bool = False
-        self._mutex = QMutex()  # Thread safety for camera access
+        self._mutex = QMutex()  # Keamanan thread untuk akses kamera
         self._target_fps: int = 30
     
     def _open_camera(self, index: int) -> Optional[cv2.VideoCapture]:
         """
-        Try to open camera with different backends.
-        DirectShow is preferred on Windows for better compatibility.
+        Coba buka kamera dengan backend berbeda.
+        DirectShow lebih aman di Windows untuk kompatibilitas yang lebih baik.
         
         Args:
             index: Camera index
@@ -40,7 +40,7 @@ class VideoService(QThread):
         Returns:
             VideoCapture object or None if failed
         """
-        # Try backends in order of preference for Windows
+        # Coba backend dalam urutan preferensi untuk Windows
         backends = [
             (cv2.CAP_DSHOW, "DirectShow"),
             (cv2.CAP_MSMF, "MSMF"),
@@ -53,14 +53,14 @@ class VideoService(QThread):
                 cap = cv2.VideoCapture(index, backend)
                 
                 if cap.isOpened():
-                    # Camera warm-up time (important for some cameras)
+                    # Waktu pemanasan kamera (penting untuk beberapa kamera)
                     time.sleep(0.5)
                     
-                    # Discard first few frames (often corrupted or black)
+                    # Buang beberapa frame pertama (sering rusak atau hitam)
                     for _ in range(5):
                         cap.read()
                     
-                    # Verify we can actually read frames
+                    # Verifikasi kita benar-benar bisa membaca frame
                     ret, frame = cap.read()
                     if ret and frame is not None:
                         print(f"✓ Camera {index} opened with {name} backend")
@@ -78,7 +78,7 @@ class VideoService(QThread):
     
     def start_capture(self, camera_index: Optional[int] = None) -> bool:
         """
-        Start video capture.
+        Mulai penangkapan video.
         
         Args:
             camera_index: Camera index to capture from
@@ -86,44 +86,57 @@ class VideoService(QThread):
         Returns:
             True if capture thread started
         """
+        # Cegah crash jika thread sudah berjalan
+        if self.isRunning():
+            print("Warning: Capture thread already running, ignoring duplicate start")
+            return True
+        
         if camera_index is not None:
             self._camera_index = camera_index
             
         self._running = True
-        self.start()  # Start QThread
+        self.start()  # Mulai QThread
         return True
     
     def stop_capture(self):
-        """Stop video capture gracefully"""
+        """Hentikan penangkapan video dengan baik tanpa memblokir UI."""
         self._running = False
-        self.wait(2000)  # Wait up to 2 seconds for thread to finish
         
-        # If thread finished, it already released the camera.
-        # If it timed out, we force release here.
+        # Tunggu thread selesai, dengan timeout yang aman
+        if self.isRunning():
+            if not self.wait(3000):  # Tunggu hingga 3 detik
+                print("Warning: Capture thread not responding, forcing termination")
+                self.terminate()  # Paksa hentikan hanya jika benar-benar macet
+                self.wait(500)
+        
+        # Pastikan kamera dilepaskan
         if self._capture is not None:
-            self._capture.release()
+            try:
+                self._capture.release()
+            except Exception:
+                pass
             self._capture = None
     
     def run(self):
-        """Main capture loop - runs in separate thread"""
-        # Open camera with best available backend
+        """Loop penangkapan utama - berjalan di thread terpisah"""
+        # Buka kamera dengan backend terbaik yang tersedia
         self._capture = self._open_camera(self._camera_index)
         
         if self._capture is None or not self._capture.isOpened():
             self.error_occurred.emit(
-                f"Could not open camera {self._camera_index}.\n"
-                "Please check:\n"
-                "• No other app is using the camera\n"
-                "• Camera privacy is enabled in Windows Settings\n"
-                "• Camera drivers are up to date"
+                f"Tidak dapat membuka kamera {self._camera_index}.\n"
+                "Silahkan cek:\n"
+                "• Tidak ada aplikasi lain yang menggunakan kamera\n"
+                "• Privasi kamera diaktifkan di Windows Settings\n"
+                "• Driver kamera sudah diperbarui"
             )
             return
         
-        # Reduce buffer size for lower latency
+        # Kurangi ukuran buffer untuk latensi lebih rendah
         try:
             self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        except:
-            pass  # Some cameras don't support this
+        except Exception:
+            pass  # Beberapa kamera tidak mendukung ini
         
         self.capture_started.emit()
         
@@ -134,7 +147,7 @@ class VideoService(QThread):
         while self._running:
             loop_start = time.time()
             
-            # Thread-safe camera access
+            # Akses kamera aman thread
             with QMutexLocker(self._mutex):
                 if self._capture is None or not self._capture.isOpened():
                     break
@@ -148,19 +161,19 @@ class VideoService(QThread):
                 if consecutive_failures >= max_failures:
                     self.error_occurred.emit("Camera disconnected or stopped responding.")
                     break
-                time.sleep(0.05)  # Brief pause before retry
+                time.sleep(0.05)  # Jeda singkat sebelum coba lagi
                 continue
             
-            # Frame rate control
+            # Kontrol kecepatan frame
             processing_time = time.time() - loop_start
             if processing_time < frame_delay:
                 time.sleep(frame_delay - processing_time)
         
-        # Cleanup on exit
+        # Pembersihan saat keluar
         if self._capture is not None:
             self._capture.release()
             self._capture = None
     
     def is_running(self) -> bool:
-        """Check if capture is currently running"""
+        """Periksa apakah penangkapan sedang berjalan"""
         return self._running

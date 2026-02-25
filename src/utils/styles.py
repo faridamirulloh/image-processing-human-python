@@ -1,10 +1,10 @@
 """
-UI Styles and Themes
-Centralized stylesheet definitions for the application.
+Gaya dan Tema UI
+Definisi stylesheet terpusat untuk aplikasi.
 """
 
 def get_main_theme() -> str:
-    """Get the global application theme stylesheet."""
+    """Dapatkan stylesheet tema aplikasi global."""
     return """
         QMainWindow {
             background-color: #0f0f1a;
@@ -22,7 +22,7 @@ def get_main_theme() -> str:
     """
 
 def get_combo_style() -> str:
-    """Get stylesheet for combo boxes."""
+    """Dapatkan stylesheet untuk kotak kombo."""
     return """
         QComboBox {
             background-color: #1a1a2e;
@@ -56,7 +56,7 @@ def get_combo_style() -> str:
     """
 
 def get_button_style(color: str, hover_color: str) -> str:
-    """Generate stylesheet for standard action buttons."""
+    """Hasilkan stylesheet untuk tombol tindakan standar."""
     return f"""
         QPushButton {{
             background-color: {color};
@@ -65,7 +65,7 @@ def get_button_style(color: str, hover_color: str) -> str:
             color: #000000;
             font-weight: bold;
             font-size: 14px;
-            padding: 4px 8px 8px 8px;
+            padding: 4px 8px 4px 8px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -83,7 +83,7 @@ def get_button_style(color: str, hover_color: str) -> str:
     """
 
 def get_icon_button_style(color: str, hover_color: str) -> str:
-    """Generate stylesheet for icon-only buttons."""
+    """Hasilkan stylesheet untuk tombol hanya icon."""
     return f"""
         QPushButton {{
             background-color: {color};
@@ -107,7 +107,7 @@ def get_icon_button_style(color: str, hover_color: str) -> str:
     """
 
 def get_splitter_handle_style() -> str:
-    """Get stylesheet for QSplitter handle."""
+    """Dapatkan stylesheet untuk pegangan QSplitter."""
     return """
         QSplitter::handle {
             background-color: #2d2d44;
@@ -119,7 +119,7 @@ def get_splitter_handle_style() -> str:
     """
 
 def get_control_bar_style() -> str:
-    """Get stylesheet for the top control bar frame."""
+    """Dapatkan stylesheet untuk bingkai bilah kontrol atas."""
     return """
         QFrame {
             background-color: #16213e;
@@ -128,5 +128,5 @@ def get_control_bar_style() -> str:
     """
 
 def get_status_bar_style() -> str:
-    """Get stylesheet for the status bar."""
+    """Dapatkan stylesheet untuk bilah status."""
     return "color: #8b8b8b; font-size: 11px;"

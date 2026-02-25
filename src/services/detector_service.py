@@ -1,7 +1,7 @@
 """
-Detector Service - YOLO Human Detection
-Provides AI-based person detection using YOLO models (v8, v11, v12).
-CPU-only inference for maximum compatibility.
+Layanan Detektor - Deteksi Manusia YOLO
+Menyediakan deteksi orang berbasis AI menggunakan model YOLO (v8, v11, v12).
+Inferensi hanya CPU — dioptimalkan untuk menggunakan semua core CPU.
 """
 
 import os
@@ -21,23 +21,23 @@ from utils.constants import (
 import time
 
 # Confidence update interval in seconds (stabilizes UI flicker)
-# Confidence update interval in seconds (stabilizes UI flicker)
+# Interval pembaruan deteksi dalam detik (menstabilkan UI)
 CONFIDENCE_UPDATE_INTERVAL = 0.25
 
-# Bounding box smoothing factor (0.0 - 1.0)
-# Lower = smoother/slower, Higher = faster/jittery
+# Faktor penghalusan kotak pembatas (0.0 - 1.0)
+# Lebih rendah = lebih halus/lambat, Lebih tinggi = lebih cepat/gugup
 BOX_SMOOTHING_FACTOR = 0.3
 
 
 class DetectorService:
     """
-    Human detection service using YOLO models.
-    Handles model loading, inference, and result annotation.
+    Layanan deteksi manusia menggunakan model YOLO.
+    Menangani pemuatan model, inferensi, dan anotasi hasil.
     """
     
     def __init__(self, model_name: str = DEFAULT_MODEL, use_gpu: bool = False):
         """
-        Initialize the detector service.
+        Inisialisasi layanan detektor.
         
         Args:
             model_name: Name of the model from YOLO_MODELS
@@ -49,7 +49,7 @@ class DetectorService:
         self._confidence: float = CONFIDENCE_THRESHOLD
         self._last_detections: List[Dict] = []
         
-        # Tracking for confidence stabilization
+        # Pelacakan untuk stabilisasi kepercayaan
         # format: {track_id: {'conf': float, 'last_update': float, 'bbox': tuple}}
         self._trackers = {}
         self._next_track_id = 0
@@ -57,38 +57,78 @@ class DetectorService:
         self._torch_available = False
         self._init_error: Optional[str] = None
         
-        # Check if PyTorch is available
+        # Periksa apakah PyTorch tersedia dan optimalkan CPU
         try:
             import torch
             self._torch_available = True
+            self._optimize_cpu()
         except Exception as e:
             self._init_error = str(e)
             print(f"Warning: PyTorch not available: {e}")
         
-        # Load model if PyTorch is available
+        # Aktifkan optimisasi OpenCV (SSE, AVX, dll)
+        cv2.setUseOptimized(True)
+        
+        # Muat model jika PyTorch tersedia
         if self._torch_available:
             self.load_model(model_name)
     
+    def _optimize_cpu(self):
+        """
+        Optimalkan penggunaan CPU secara dinamis berdasarkan perangkat.
+        - Perangkat kuat (8+ core): gunakan semua core
+        - Perangkat sedang (4-7 core): sisakan 1 core untuk UI
+        - Perangkat lemah (1-3 core): sisakan 1 core untuk UI
+        """
+        import torch
+        
+        total_cores = os.cpu_count() or 2
+        
+        # Tentukan jumlah thread optimal berdasarkan jumlah core
+        if total_cores >= 8:
+            # Perangkat kuat — gunakan semua core, UI tetap lancar
+            infer_threads = total_cores
+        elif total_cores >= 4:
+            # Perangkat sedang — sisakan 1 core untuk UI + kamera
+            infer_threads = total_cores - 1
+        else:
+            # Perangkat lemah — minimal 1 thread untuk inferensi
+            infer_threads = max(1, total_cores - 1)
+        
+        # Terapkan konfigurasi thread PyTorch
+        torch.set_num_threads(infer_threads)
+        
+        try:
+            interop = max(1, total_cores // 4)  # 1 interop thread per 4 core
+            torch.set_num_interop_threads(interop)
+        except RuntimeError:
+            pass  # Sudah diatur sebelumnya
+        
+        print(
+            f"CPU optimization: {infer_threads}/{total_cores} cores for inference, "
+            f"torch threads={torch.get_num_threads()}"
+        )
+    
     @property
     def torch_available(self) -> bool:
-        """Check if PyTorch is available"""
+        """Periksa apakah PyTorch tersedia"""
         return self._torch_available
     
     @property
     def init_error(self) -> Optional[str]:
-        """Get initialization error if any"""
+        """Cek kesalahan inisialisasi jika ada"""
         return self._init_error
     
     @property
     def current_model(self) -> str:
-        """Get current model name"""
+        """Cek nama model saat ini"""
         return self._model_name
     
     def _get_model_path(self, model_file: str) -> str:
         """
-        Resolve model file path.
-        Checks in order: PyInstaller bundle, current dir, project dir.
-        Falls back to original filename (ultralytics will download).
+        Cari path file model.
+        Periksa secara berurutan: bundel PyInstaller, dir saat ini, dir proyek.
+        Kembali ke nama file asli (ultralytics akan mengunduh).
         
         Args:
             model_file: Model filename (e.g., 'yolov8n.pt')
@@ -96,31 +136,31 @@ class DetectorService:
         Returns:
             Full path to the model file
         """
-        # Check PyInstaller bundle first (for packaged .exe)
+        # Periksa bundel PyInstaller terlebih dahulu (untuk .exe yang dipaketkan)
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             bundle_path = os.path.join(sys._MEIPASS, model_file)
             if os.path.exists(bundle_path):
                 print(f"Using bundled model: {bundle_path}")
                 return bundle_path
         
-        # Check current working directory
+        # Periksa direktori kerja saat ini
         if os.path.exists(model_file):
             return model_file
         
-        # Check project directory (two levels up from this file)
+        # Periksa direktori proyek (dua tingkat di atas file ini)
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = os.path.dirname(os.path.dirname(script_dir))
         project_path = os.path.join(project_dir, model_file)
         if os.path.exists(project_path):
             return project_path
         
-        # Model not found locally - ultralytics will download it
+        # Model tidak ditemukan secara lokal - ultralytics akan mengunduhnya
         print(f"Model not found locally, will attempt download: {model_file}")
         return model_file
     
     def load_model(self, model_name: str, use_gpu: bool = False) -> bool:
         """
-        Load a YOLO model.
+        Muat model YOLO.
         
         Args:
             model_name: Name of the model from YOLO_MODELS
@@ -135,7 +175,7 @@ class DetectorService:
         try:
             from ultralytics import YOLO
             
-            # Validate model name
+            # Validasi nama model
             if model_name not in YOLO_MODELS:
                 print(f"Unknown model: {model_name}, using default")
                 model_name = DEFAULT_MODEL
@@ -143,7 +183,7 @@ class DetectorService:
             model_file = YOLO_MODELS[model_name]["file"]
             model_path = self._get_model_path(model_file)
             
-            # Load model on CPU
+            # Muat model di CPU
             self._model = YOLO(model_path)
             self._model.to(self._device)
             self._model_name = model_name
@@ -158,7 +198,7 @@ class DetectorService:
     
     def detect_humans(self, frame: np.ndarray) -> Tuple[np.ndarray, int, List[Dict]]:
         """
-        Detect humans in a frame and annotate with bounding boxes.
+        Deteksi manusia dalam frame dan anotasi dengan kotak pembatas.
         
         Args:
             frame: Input frame (BGR format from OpenCV)
@@ -173,14 +213,14 @@ class DetectorService:
             return frame, 0, []
         
         try:
-            # Run YOLO inference
+            # Jalankan inferensi YOLO
             results = self._model(frame, verbose=False, conf=self._confidence)
             
             detections = []
             annotated_frame = frame.copy()
             current_time = time.time()
             
-            # Temporary list for current frame matches
+            # Daftar sementara untuk kecocokan frame saat ini
             current_trackers = {}
             
             for result in results:
@@ -191,18 +231,18 @@ class DetectorService:
                 for box in boxes:
                     cls_id = int(box.cls[0])
                     
-                    # Filter for person class only
+                    # Filter hanya untuk class person
                     if cls_id != PERSON_CLASS_ID:
                         continue
                         
-                    # Extract bbox and raw confidence
+                    # Ekstrak bbox dan deteksi mentah
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     raw_conf = float(box.conf[0])
                     current_bbox = (x1, y1, x2, y2)
                     
-                    # Simple tracking: find best matching existing tracker via IoU
+                    # Pelacakan sederhana: temukan pelacak ada yang paling cocok melalui IoU
                     best_match_id = None
-                    max_iou = 0.5  # IoU threshold for matching
+                    max_iou = 0.5  # batas IoU untuk pencocokan
                     
                     for tid, data in self._trackers.items():
                         iou = self._calculate_iou(current_bbox, data['bbox'])
@@ -210,12 +250,12 @@ class DetectorService:
                             max_iou = iou
                             best_match_id = tid
                     
-                    # Determine stable confidence and smooth bbox
+                    # Tentukan deteksi stabil dan haluskan bbox
                     if best_match_id is not None:
-                        # Found existing object
+                        # Objek yang ada ditemukan
                         tracker = self._trackers[best_match_id]
                         
-                        # Update confidence only if interval passed
+                        # Perbarui deteksi hanya jika interval berlalu
                         if current_time - tracker['last_update'] > CONFIDENCE_UPDATE_INTERVAL:
                             display_conf = raw_conf
                             last_update = current_time
@@ -223,7 +263,7 @@ class DetectorService:
                             display_conf = tracker['conf']
                             last_update = tracker['last_update']
                         
-                        # Smooth bbox using Exponential Moving Average (EMA)
+                        # Haluskan bbox menggunakan Exponential Moving Average (EMA)
                         old_x1, old_y1, old_x2, old_y2 = tracker['bbox']
                         curr_x1, curr_y1, curr_x2, curr_y2 = current_bbox
                         
@@ -234,17 +274,17 @@ class DetectorService:
                         
                         final_bbox = (smooth_x1, smooth_y1, smooth_x2, smooth_y2)
                             
-                        # Update tracker
+                        # Perbarui pelacak
                         current_trackers[best_match_id] = {
                             'conf': display_conf,
                             'last_update': last_update,
                             'bbox': final_bbox
                         }
                     else:
-                        # New object detected - use raw values
+                        # Objek baru terdeteksi - gunakan nilai mentah
                         self._next_track_id += 1
                         display_conf = raw_conf
-                        final_bbox = tuple(map(float, current_bbox)) # Store as float for smoothing
+                        final_bbox = tuple(map(float, current_bbox)) # Simpan sebagai float untuk penghalusan
                         
                         current_trackers[self._next_track_id] = {
                             'conf': display_conf,
@@ -252,7 +292,7 @@ class DetectorService:
                             'bbox': final_bbox
                         }
                     
-                    # Convert smoothed bbox to int for drawing
+                    # Konversi bbox yang dihaluskan ke int untuk menggambar
                     draw_x1, draw_y1, draw_x2, draw_y2 = map(int, final_bbox)
                     
                     detections.append({
@@ -261,7 +301,7 @@ class DetectorService:
                         'class_id': cls_id
                     })
                     
-                    # Draw bounding box
+                    # Gambar kotak pembatas
                     cv2.rectangle(
                         annotated_frame, 
                         (draw_x1, draw_y1), (draw_x2, draw_y2), 
@@ -269,13 +309,13 @@ class DetectorService:
                         2
                     )
                     
-                    # Draw label with stabilized confidence
+                    # Gambar label dengan deteksi yang distabilkan
                     label = f"Person {display_conf * 100:.0f}%"
                     label_size, _ = cv2.getTextSize(
                         label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
                     )
                     
-                    # Label background
+                    # Latar belakang label
                     cv2.rectangle(
                         annotated_frame,
                         (draw_x1, draw_y1 - label_size[1] - 10),
@@ -284,7 +324,7 @@ class DetectorService:
                         -1
                     )
                     
-                    # Label text
+                    # Teks label
                     cv2.putText(
                         annotated_frame, label,
                         (draw_x1, draw_y1 - 5),
@@ -292,7 +332,7 @@ class DetectorService:
                         (0, 0, 0), 2
                     )
             
-            # Update trackers list (remove lost objects)
+            # Perbarui daftar pelacak (hapus objek yang hilang)
             self._trackers = current_trackers
             self._last_detections = detections
             
@@ -303,16 +343,16 @@ class DetectorService:
             return frame, 0, []
     
     def get_last_detections(self) -> List[Dict]:
-        """Get the last detection results"""
+        """Dapatkan hasil deteksi terakhir"""
         return self._last_detections
     
     def set_confidence(self, confidence: float):
-        """Set detection confidence threshold (0.1 to 1.0)"""
+        """Tetapkan ambang kepercayaan deteksi (0.1 hingga 1.0)"""
         self._confidence = max(0.1, min(confidence, 1.0))
 
     def _calculate_iou(self, box1: Tuple[float, float, float, float], box2: Tuple[float, float, float, float]) -> float:
         """
-        Calculate Intersection over Union (IoU) between two bounding boxes.
+        Hitung Intersection over Union (IoU) antara dua kotak pembatas.
         
         Args:
             box1: (x1, y1, x2, y2)
@@ -324,18 +364,18 @@ class DetectorService:
         x1_min, y1_min, x1_max, y1_max = box1
         x2_min, y2_min, x2_max, y2_max = box2
         
-        # Calculate intersection coords
+        # Hitung koordinat persimpangan
         xi_min = max(x1_min, x2_min)
         yi_min = max(y1_min, y2_min)
         xi_max = min(x1_max, x2_max)
         yi_max = min(y1_max, y2_max)
         
-        # Calculate intersection area
+        # Hitung area persimpangan
         inter_width = max(0, xi_max - xi_min)
         inter_height = max(0, yi_max - yi_min)
         inter_area = inter_width * inter_height
         
-        # Calculate union area
+        # Hitung area penyatuan
         box1_area = (x1_max - x1_min) * (y1_max - y1_min)
         box2_area = (x2_max - x2_min) * (y2_max - y2_min)
         union_area = box1_area + box2_area - inter_area
