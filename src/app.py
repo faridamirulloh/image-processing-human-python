@@ -83,6 +83,14 @@ class MainWindow(QMainWindow):
         self._frame_times = deque(maxlen=30)   # 30 frame terakhir
         self._last_fps_update = 0              # Batasi pembaruan tampilan FPS
         
+        # Processing mode: 'streaming' or 'low-specs'
+        self._processing_mode = 'streaming'
+        self._lowspec_ready = True
+        self._last_annotated_frame = None
+        self._lowspec_timer = QTimer()
+        self._lowspec_timer.setSingleShot(True)
+        self._lowspec_timer.timeout.connect(self._lowspec_mark_ready)
+        
         # Inisiasi UI, hubungkan sinyal, pindai kamera, dan load model AI
         self._init_ui()
         self._connect_signals()
@@ -235,6 +243,26 @@ class MainWindow(QMainWindow):
         model_layout.addWidget(model_label)
         model_layout.addWidget(self._model_combo)
         parent_layout.addLayout(model_layout)
+        
+        # Dropdown mode pemrosesan
+        mode_layout = QHBoxLayout()
+        mode_layout.setSpacing(5)
+        mode_label = QLabel("⚡")
+        mode_label.setStyleSheet("color: #ffffff; font-size: 14px;")
+        
+        self._mode_combo = QComboBox()
+        self._mode_combo.setMinimumWidth(120)
+        self._mode_combo.setStyleSheet(styles.get_combo_style())
+        self._mode_combo.addItem("Streaming")
+        self._mode_combo.addItem("Low-Specs")
+        self._mode_combo.setToolTip(
+            "Streaming: Process every frame (high CPU usage)\n"
+            "Low-Specs: Capture \u2192 Detect \u2192 Display \u2192 Repeat (low CPU usage)"
+        )
+        
+        mode_layout.addWidget(mode_label)
+        mode_layout.addWidget(self._mode_combo)
+        parent_layout.addLayout(mode_layout)
 
     def _create_recording_controls(self, parent_layout: QHBoxLayout):
         """Tambahkan tombol folder, tangkapan layar, dan rekam ke tata letak."""
@@ -272,6 +300,7 @@ class MainWindow(QMainWindow):
         self._refresh_btn.clicked.connect(self._refresh_cameras)
         self._camera_combo.currentIndexChanged.connect(self._on_camera_changed)
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
+        self._mode_combo.currentTextChanged.connect(self._on_mode_changed)
         
         # Tombol rekam & screenshot
         self._folder_btn.clicked.connect(self._on_folder_open)
@@ -515,8 +544,17 @@ class MainWindow(QMainWindow):
         self._capture_btn.setEnabled(True)
         self._record_btn.setEnabled(True)
         
+        # Apply processing mode settings
+        if self._processing_mode == 'low-specs':
+            self._video_service.set_target_fps(10)
+            self._lowspec_ready = True
+            self._last_annotated_frame = None
+        else:
+            self._video_service.set_target_fps(30)
+        
         self._stats_widget.update_status("Running", True)
-        self._status_bar.showMessage("Detection running...")
+        mode_label = "Low-Specs" if self._processing_mode == 'low-specs' else "Streaming"
+        self._status_bar.showMessage(f"Detection running ({mode_label} mode)...")
     
     def _on_stop(self):
         """Hentikan deteksi AI tetapi biarkan preview kamera tetap berjalan."""
@@ -536,9 +574,45 @@ class MainWindow(QMainWindow):
         self._stop_btn.setEnabled(False)
         self._camera_combo.setEnabled(True)
         
+        # Reset low-specs state and restore preview FPS
+        self._video_service.set_target_fps(30)
+        self._lowspec_ready = True
+        self._last_annotated_frame = None
+        self._lowspec_timer.stop()
+        
         self._stats_widget.update_status("Stopped", False)
         self._stats_widget.reset_stats()
         self._status_bar.showMessage("Detection stopped - camera preview active")
+    
+    def _on_mode_changed(self, mode_text: str):
+        """Handle processing mode change."""
+        new_mode = 'low-specs' if mode_text == 'Low-Specs' else 'streaming'
+        
+        if new_mode == self._processing_mode:
+            return
+        
+        self._processing_mode = new_mode
+        
+        # Apply FPS settings if video is running
+        if self._is_previewing or self._is_running:
+            if new_mode == 'low-specs':
+                self._video_service.set_target_fps(10)
+            else:
+                self._video_service.set_target_fps(30)
+        
+        # Reset low-specs state
+        self._lowspec_ready = True
+        self._last_annotated_frame = None
+        self._frame_times.clear()
+        
+        if new_mode == 'low-specs':
+            self._status_bar.showMessage("Mode: Low-Specs (reduced CPU usage)")
+        else:
+            self._status_bar.showMessage("Mode: Streaming (real-time processing)")
+    
+    def _lowspec_mark_ready(self):
+        """Mark low-specs mode as ready to process the next frame."""
+        self._lowspec_ready = True
     
     def _on_frame_ready(self, frame: np.ndarray):
         """
@@ -551,6 +625,19 @@ class MainWindow(QMainWindow):
         
         # Saat deteksi aktif, jalankan YOLO dan overlay kotak pembatas
         if self._is_running and self._detector_service is not None:
+            
+            # Low-specs mode: skip frames while cooling down
+            if self._processing_mode == 'low-specs':
+                if not self._lowspec_ready:
+                    # Show cached annotated frame or raw preview
+                    display_frame = self._last_annotated_frame if self._last_annotated_frame is not None else frame
+                    self._recording_service.write_frame(display_frame)
+                    self._video_widget.update_frame(display_frame)
+                    return
+                
+                # Mark as not ready until cooldown timer fires
+                self._lowspec_ready = False
+            
             start_time = time.time()
             
             try:
@@ -575,13 +662,17 @@ class MainWindow(QMainWindow):
             
             display_frame = annotated_frame
             self._stats_widget.update_person_count(person_count)
+            
+            # Cache result and start cooldown for low-specs mode
+            if self._processing_mode == 'low-specs':
+                self._last_annotated_frame = annotated_frame
+                self._lowspec_timer.start(100)
         else:
             # Preview saja: tampilkan frame kamera mentah
             display_frame = frame
         
         # Tambahkan ke perekaman jika aktif
-        if self._recording_service.is_recording():
-            self._recording_service.write_frame(display_frame)
+        self._recording_service.write_frame(display_frame)
         
         self._video_widget.update_frame(display_frame)
     
@@ -774,6 +865,7 @@ class MainWindow(QMainWindow):
     
     def closeEvent(self, event):
         """Bersihkan sumber daya perekaman dan kamera saat keluar."""
+        self._lowspec_timer.stop()
         self._recording_service.cleanup()
         if self._is_running or self._is_previewing:
             self._video_service.stop_capture()

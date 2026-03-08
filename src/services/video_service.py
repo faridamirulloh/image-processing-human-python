@@ -140,11 +140,11 @@ class VideoService(QThread):
         
         self.capture_started.emit()
         
-        frame_delay = 1.0 / self._target_fps
         consecutive_failures = 0
         max_failures = 30
         
         while self._running:
+            frame_delay = 1.0 / self._target_fps
             loop_start = time.time()
             
             # Akses kamera aman thread
@@ -173,6 +173,10 @@ class VideoService(QThread):
         if self._capture is not None:
             self._capture.release()
             self._capture = None
+    
+    def set_target_fps(self, fps: int):
+        """Set target FPS for frame capture (takes effect on next frame)."""
+        self._target_fps = max(1, min(fps, 60))
     
     def is_running(self) -> bool:
         """Periksa apakah penangkapan sedang berjalan"""

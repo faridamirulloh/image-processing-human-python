@@ -4,6 +4,7 @@ Menyimpan file output ke folder output yang dapat dikonfigurasi pengguna.
 """
 
 import os
+import time
 import cv2
 import numpy as np
 from datetime import datetime
@@ -23,6 +24,9 @@ class RecordingService:
         self._writer: Optional[cv2.VideoWriter] = None
         self._is_recording = False
         self._current_file = ""
+        self._rec_start_time = 0.0
+        self._frames_written = 0
+        self._last_frame = None
 
         # Pastikan folder output ada
         os.makedirs(self._output_folder, exist_ok=True)
@@ -78,17 +82,43 @@ class RecordingService:
 
         self._is_recording = True
         self._current_file = filepath
+        self._rec_start_time = time.time()
+        self._frames_written = 0
+        self._last_frame = None
         return filepath
 
     def write_frame(self, frame: np.ndarray):
         """
         Tulis satu frame ke perekaman aktif.
+        Menggunakan wall-clock timestamp untuk menjaga sinkronisasi waktu.
+        Frame yang terlewat diisi dengan duplikat frame sebelumnya.
 
         Args:
             frame: BGR frame from OpenCV (same format as camera output)
         """
-        if self._is_recording and self._writer is not None:
-            self._writer.write(frame)
+        if not self._is_recording or self._writer is None:
+            return
+
+        now = time.time()
+        elapsed = now - self._rec_start_time
+        expected_frame = int(elapsed * RECORDING_FPS)
+
+        # Don't write if ahead of schedule
+        if expected_frame <= self._frames_written:
+            self._last_frame = frame
+            return
+
+        # Fill gaps with previous frame (cap at 2s to avoid huge burst)
+        gap = min(expected_frame - self._frames_written - 1, int(RECORDING_FPS * 2))
+        if gap > 0 and self._last_frame is not None:
+            for _ in range(gap):
+                self._writer.write(self._last_frame)
+                self._frames_written += 1
+
+        # Write current frame
+        self._writer.write(frame)
+        self._frames_written += 1
+        self._last_frame = frame
 
     def stop_recording(self) -> str:
         """
@@ -105,6 +135,7 @@ class RecordingService:
 
         self._is_recording = False
         self._current_file = ""
+        self._last_frame = None
         return saved_file
 
     def is_recording(self) -> bool:
