@@ -11,7 +11,8 @@ from collections import deque
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QComboBox, QPushButton, QLabel, QFrame,
-    QSplitter, QStatusBar, QMessageBox, QFileDialog, QMenu, QAction
+    QSplitter, QStatusBar, QMessageBox, QFileDialog, QMenu, QAction,
+    QDialog, QSlider, QSpinBox, QCheckBox, QGroupBox
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QIcon
@@ -19,9 +20,228 @@ from PyQt5.QtGui import QFont, QIcon
 from services import CameraService, VideoService, DetectorService, RecordingService
 from widgets import VideoWidget, StatsWidget
 from utils.constants import (
-    WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT, YOLO_MODELS
+    WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT, YOLO_MODELS,
+    DEFAULT_CAPTURE_FPS, MIN_FPS, MAX_FPS
 )
 from utils import styles
+
+
+class SettingsDialog(QDialog):
+    """Modal settings dialog for performance tuning and FPS control."""
+    
+    def __init__(self, parent=None, video_service=None, detector_service=None, video_widget=None):
+        super().__init__(parent)
+        self._video_service = video_service
+        self._detector_service = detector_service
+        self._video_widget = video_widget
+        self.setWindowTitle("⚙️ Performance Settings")
+        self.setFixedWidth(420)
+        self.setStyleSheet(styles.get_settings_dialog_style())
+        self._init_ui()
+    
+    def _init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        
+        # Title
+        title = QLabel("⚙️ Performance Settings")
+        title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        title.setStyleSheet("color: #00d9ff;")
+        layout.addWidget(title)
+        
+        # === FPS Group ===
+        fps_group = QGroupBox("Frame Rate")
+        fps_layout = QVBoxLayout(fps_group)
+        fps_layout.setSpacing(8)
+        
+        # FPS Slider
+        slider_row = QHBoxLayout()
+        slider_label = QLabel("Target FPS:")
+        slider_row.addWidget(slider_label)
+        
+        self._fps_slider = QSlider(Qt.Horizontal)
+        self._fps_slider.setMinimum(MIN_FPS)
+        self._fps_slider.setMaximum(MAX_FPS)
+        current_fps = self._video_service.get_target_fps() if self._video_service else DEFAULT_CAPTURE_FPS
+        self._fps_slider.setValue(current_fps)
+        self._fps_slider.setStyleSheet(styles.get_slider_style())
+        slider_row.addWidget(self._fps_slider)
+        
+        self._fps_value_label = QLabel(str(current_fps))
+        self._fps_value_label.setFixedWidth(30)
+        self._fps_value_label.setStyleSheet("color: #00d9ff; font-weight: bold;")
+        slider_row.addWidget(self._fps_value_label)
+        
+        fps_layout.addLayout(slider_row)
+        
+        # FPS Presets
+        preset_row = QHBoxLayout()
+        preset_label = QLabel("Presets:")
+        preset_label.setStyleSheet("color: #8b8b8b; font-size: 11px;")
+        preset_row.addWidget(preset_label)
+        
+        for name, value in [("5", 5), ("10", 10), ("15", 15), ("20", 20), ("30", 30)]:
+            btn = QPushButton(name)
+            btn.setFixedSize(36, 26)
+            btn.setStyleSheet(styles.get_icon_button_style("#2d2d44", "#00d9ff"))
+            btn.clicked.connect(lambda checked, v=value: self._set_fps_preset(v))
+            preset_row.addWidget(btn)
+        
+        preset_row.addStretch()
+        fps_layout.addLayout(preset_row)
+        layout.addWidget(fps_group)
+        
+        # === Detection Group ===
+        det_group = QGroupBox("Detection Performance")
+        det_layout = QVBoxLayout(det_group)
+        det_layout.setSpacing(8)
+        
+        # Inference Scale
+        scale_row = QHBoxLayout()
+        scale_label = QLabel("Inference Resolution:")
+        scale_row.addWidget(scale_label)
+        
+        self._scale_combo = QComboBox()
+        self._scale_combo.setStyleSheet(styles.get_combo_style())
+        self._scale_combo.addItem("Full (1.0x)", 1.0)
+        self._scale_combo.addItem("¾ (0.75x)", 0.75)
+        self._scale_combo.addItem("Half (0.5x)", 0.5)
+        self._scale_combo.addItem("Quarter (0.25x)", 0.25)
+        
+        # Set current value
+        if self._detector_service:
+            current_scale = self._detector_service.get_inference_scale()
+            for i in range(self._scale_combo.count()):
+                if self._scale_combo.itemData(i) == current_scale:
+                    self._scale_combo.setCurrentIndex(i)
+                    break
+        
+        scale_row.addWidget(self._scale_combo)
+        det_layout.addLayout(scale_row)
+        
+        # Skip Frames
+        skip_row = QHBoxLayout()
+        skip_label = QLabel("Skip Frames:")
+        skip_row.addWidget(skip_label)
+        
+        self._skip_spin = QSpinBox()
+        self._skip_spin.setMinimum(1)
+        self._skip_spin.setMaximum(10)
+        if self._detector_service:
+            self._skip_spin.setValue(self._detector_service.get_skip_frames())
+        skip_row.addWidget(self._skip_spin)
+        
+        skip_desc = QLabel("(1 = every frame)")
+        skip_desc.setStyleSheet("color: #8b8b8b; font-size: 11px;")
+        skip_row.addWidget(skip_desc)
+        skip_row.addStretch()
+        det_layout.addLayout(skip_row)
+        
+        layout.addWidget(det_group)
+        
+        # === Display Group ===
+        display_group = QGroupBox("Display")
+        display_layout = QVBoxLayout(display_group)
+        
+        self._fast_scaling_cb = QCheckBox("Fast scaling (lower quality, saves CPU)")
+        self._fast_scaling_cb.setChecked(
+            self._video_widget.get_fast_scaling() if self._video_widget else True
+        )
+        display_layout.addWidget(self._fast_scaling_cb)
+        
+        layout.addWidget(display_group)
+        
+        # === Low Spec Mode ===
+        low_spec_group = QGroupBox("Quick Presets")
+        low_spec_layout = QVBoxLayout(low_spec_group)
+        
+        low_spec_btn = QPushButton("⚡ Low Spec Mode")
+        low_spec_btn.setToolTip(
+            "Optimizes for slow CPUs:\n"
+            "• FPS → 15\n"
+            "• Inference → Half resolution\n"
+            "• Skip frames → 2\n"
+            "• Fast scaling → ON"
+        )
+        low_spec_btn.setStyleSheet(styles.get_button_style("#ffa502", "#e69500"))
+        low_spec_btn.setFixedHeight(36)
+        low_spec_btn.clicked.connect(self._apply_low_spec_mode)
+        low_spec_layout.addWidget(low_spec_btn)
+        
+        reset_btn = QPushButton("🔄 Reset to Defaults")
+        reset_btn.setStyleSheet(styles.get_button_style("#4a4a6a", "#5a5a7a"))
+        reset_btn.setFixedHeight(36)
+        reset_btn.clicked.connect(self._reset_defaults)
+        low_spec_layout.addWidget(reset_btn)
+        
+        layout.addWidget(low_spec_group)
+        
+        # === Apply / Close ===
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        
+        apply_btn = QPushButton("✓ Apply")
+        apply_btn.setStyleSheet(styles.get_button_style("#00d9ff", "#00b8d9"))
+        apply_btn.setFixedSize(100, 36)
+        apply_btn.clicked.connect(self._apply_settings)
+        btn_row.addWidget(apply_btn)
+        
+        close_btn = QPushButton("Close")
+        close_btn.setStyleSheet(styles.get_button_style("#4a4a6a", "#5a5a7a"))
+        close_btn.setFixedSize(100, 36)
+        close_btn.clicked.connect(self.close)
+        btn_row.addWidget(close_btn)
+        
+        layout.addLayout(btn_row)
+        
+        # Connect live slider update
+        self._fps_slider.valueChanged.connect(
+            lambda v: self._fps_value_label.setText(str(v))
+        )
+    
+    def _set_fps_preset(self, fps: int):
+        """Set FPS slider to a preset value."""
+        self._fps_slider.setValue(fps)
+    
+    def _apply_low_spec_mode(self):
+        """Apply all low-spec optimizations."""
+        self._fps_slider.setValue(15)
+        # Set scale to Half (0.5x) — index 2
+        self._scale_combo.setCurrentIndex(2)
+        self._skip_spin.setValue(2)
+        self._fast_scaling_cb.setChecked(True)
+        self._apply_settings()
+    
+    def _reset_defaults(self):
+        """Reset all settings to defaults."""
+        self._fps_slider.setValue(DEFAULT_CAPTURE_FPS)
+        self._scale_combo.setCurrentIndex(0)  # Full (1.0x)
+        self._skip_spin.setValue(1)
+        self._fast_scaling_cb.setChecked(True)
+        self._apply_settings()
+    
+    def _apply_settings(self):
+        """Push all settings to the services."""
+        fps = self._fps_slider.value()
+        scale = self._scale_combo.currentData()
+        skip = self._skip_spin.value()
+        fast_scaling = self._fast_scaling_cb.isChecked()
+        
+        if self._video_service:
+            self._video_service.set_target_fps(fps)
+        
+        if self._detector_service:
+            self._detector_service.set_inference_scale(scale)
+            self._detector_service.set_skip_frames(skip)
+        
+        if self._video_widget:
+            self._video_widget.set_fast_scaling(fast_scaling)
+        
+        # Notify parent to update stats display
+        parent = self.parent()
+        if parent and hasattr(parent, '_on_settings_applied'):
+            parent._on_settings_applied(fps)
 
 
 class MainWindow(QMainWindow):
@@ -42,8 +262,9 @@ class MainWindow(QMainWindow):
         self._current_camera = 0      # Index of the currently selected camera
         self._compact_mode = False    # True when window < 900px (show icon-only buttons)
         
-        # FPS tracking (rolling average of detection processing times)
-        self._frame_times = deque(maxlen=30)  # Last 30 processing durations
+        # FPS tracking (measures actual frame-to-frame intervals)
+        self._frame_times = deque(maxlen=30)  # Last 30 frame intervals
+        self._last_frame_time = 0              # Timestamp of last frame received
         self._last_fps_update = 0              # Throttle FPS display updates
         
         # Build UI, wire signals, scan cameras, and pre-load the AI model
@@ -142,6 +363,13 @@ class MainWindow(QMainWindow):
         # 3. Recording Controls
         self._create_recording_controls(layout)
         
+        # 4. Settings Button
+        self._settings_btn = QPushButton("⚙️")
+        self._settings_btn.setToolTip("Performance Settings")
+        self._settings_btn.setFixedSize(32, 32)
+        self._settings_btn.setStyleSheet(styles.get_icon_button_style("#4a4a6a", "#00d9ff"))
+        layout.addWidget(self._settings_btn)
+        
         # Vertical separator
         separator = QFrame()
         separator.setFrameShape(QFrame.VLine)
@@ -149,7 +377,7 @@ class MainWindow(QMainWindow):
         separator.setFixedHeight(24)
         layout.addWidget(separator)
         
-        # 4. Start/Stop Buttons
+        # 5. Start/Stop Buttons
         self._start_btn = QPushButton("▶ Start")
         self._start_btn.setMinimumSize(32, 32)
         self._start_btn.setStyleSheet(styles.get_button_style("#00d9ff", "#00b8d9"))
@@ -238,6 +466,7 @@ class MainWindow(QMainWindow):
         self._refresh_btn.clicked.connect(self._refresh_cameras)
         self._camera_combo.currentIndexChanged.connect(self._on_camera_changed)
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
+        self._settings_btn.clicked.connect(self._on_settings_open)
         
         # Recording & capture buttons
         self._folder_btn.clicked.connect(self._on_folder_open)
@@ -423,18 +652,20 @@ class MainWindow(QMainWindow):
         
         # When detection is active, run YOLO and overlay bounding boxes
         if self._is_running and self._detector_service is not None:
-            start_time = time.time()
             annotated_frame, person_count, detections = self._detector_service.detect_humans(frame)
             
+            # Track actual frame rate (time between consecutive frames)
             current_time = time.time()
-            processing_time = current_time - start_time
-            if processing_time > 0:
-                self._frame_times.append(processing_time)
+            if self._last_frame_time > 0:
+                frame_interval = current_time - self._last_frame_time
+                if frame_interval > 0:
+                    self._frame_times.append(frame_interval)
+            self._last_frame_time = current_time
             
             if current_time - self._last_fps_update >= 0.25:
                 if len(self._frame_times) > 0:
-                    avg_time = sum(self._frame_times) / len(self._frame_times)
-                    real_fps = 1.0 / avg_time if avg_time > 0 else 0
+                    avg_interval = sum(self._frame_times) / len(self._frame_times)
+                    real_fps = 1.0 / avg_interval if avg_interval > 0 else 0
                     self._stats_widget.update_fps(real_fps)
                 self._last_fps_update = current_time
             
@@ -595,3 +826,22 @@ class MainWindow(QMainWindow):
         if self._is_running or self._is_previewing:
             self._video_service.stop_capture()
         event.accept()
+    
+    # =========================================================================
+    # Settings
+    # =========================================================================
+    
+    def _on_settings_open(self):
+        """Open the performance settings dialog."""
+        dialog = SettingsDialog(
+            parent=self,
+            video_service=self._video_service,
+            detector_service=self._detector_service,
+            video_widget=self._video_widget
+        )
+        dialog.exec_()
+    
+    def _on_settings_applied(self, fps: int):
+        """Callback when settings are applied from the dialog."""
+        self._stats_widget.update_target_fps(fps)
+        self._status_bar.showMessage(f"Settings applied — Target FPS: {fps}")

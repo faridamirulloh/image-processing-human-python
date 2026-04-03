@@ -6,8 +6,10 @@ Emits frames via PyQt signals for processing and display.
 import cv2
 import time
 import numpy as np
-from typing import Optional
+from typing import Optional, Tuple
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex, QMutexLocker
+
+from utils.constants import DEFAULT_CAPTURE_FPS
 
 
 class VideoService(QThread):
@@ -27,7 +29,8 @@ class VideoService(QThread):
         self._capture: Optional[cv2.VideoCapture] = None
         self._running: bool = False
         self._mutex = QMutex()  # Thread safety for camera access
-        self._target_fps: int = 30
+        self._target_fps: int = DEFAULT_CAPTURE_FPS
+        self._requested_resolution: Optional[Tuple[int, int]] = None
     
     def _open_camera(self, index: int) -> Optional[cv2.VideoCapture]:
         """
@@ -75,6 +78,32 @@ class VideoService(QThread):
                 continue
         
         return None
+    
+    def set_target_fps(self, fps: int):
+        """
+        Change the target FPS at runtime.
+        Takes effect immediately on the next loop iteration.
+        
+        Args:
+            fps: Target frames per second (clamped to 1-60)
+        """
+        from utils.constants import MIN_FPS, MAX_FPS
+        self._target_fps = max(MIN_FPS, min(fps, MAX_FPS))
+    
+    def get_target_fps(self) -> int:
+        """Get the current target FPS."""
+        return self._target_fps
+    
+    def set_camera_resolution(self, width: int, height: int):
+        """
+        Request a specific camera resolution.
+        Applied on the next start_capture() call.
+        
+        Args:
+            width: Requested frame width
+            height: Requested frame height
+        """
+        self._requested_resolution = (width, height)
     
     def start_capture(self, camera_index: Optional[int] = None) -> bool:
         """
@@ -125,13 +154,19 @@ class VideoService(QThread):
         except:
             pass  # Some cameras don't support this
         
+        # Apply requested resolution if set
+        if self._requested_resolution is not None:
+            w, h = self._requested_resolution
+            self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+            self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        
         self.capture_started.emit()
         
-        frame_delay = 1.0 / self._target_fps
         consecutive_failures = 0
         max_failures = 30
         
         while self._running:
+            frame_delay = 1.0 / self._target_fps  # Recalculate each iteration for live FPS changes
             loop_start = time.time()
             
             # Thread-safe camera access

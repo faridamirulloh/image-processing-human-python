@@ -15,7 +15,9 @@ from utils.constants import (
     DEFAULT_MODEL, 
     CONFIDENCE_THRESHOLD, 
     PERSON_CLASS_ID,
-    DETECTION_BOX_COLOR
+    DETECTION_BOX_COLOR,
+    INFERENCE_SCALE,
+    SKIP_FRAMES_DEFAULT
 )
 
 import time
@@ -53,6 +55,14 @@ class DetectorService:
         # format: {track_id: {'conf': float, 'last_update': float, 'bbox': tuple}}
         self._trackers = {}
         self._next_track_id = 0
+        
+        # Performance: inference downscaling
+        self._inference_scale: float = INFERENCE_SCALE
+        
+        # Performance: skip-frame detection
+        self._skip_frames: int = SKIP_FRAMES_DEFAULT
+        self._frame_counter: int = 0
+        self._last_annotated_detections: List[Dict] = []  # cached detections for redraw
         
         self._torch_available = False
         self._init_error: Optional[str] = None
@@ -156,9 +166,65 @@ class DetectorService:
             self._init_error = str(e)
             return False
     
+    def set_inference_scale(self, scale: float):
+        """
+        Set the inference downscale factor.
+        Lower values = faster inference but less accurate detection.
+        
+        Args:
+            scale: Scale factor (0.25, 0.5, 0.75, or 1.0)
+        """
+        self._inference_scale = max(0.25, min(scale, 1.0))
+    
+    def get_inference_scale(self) -> float:
+        """Get the current inference scale factor."""
+        return self._inference_scale
+    
+    def set_skip_frames(self, n: int):
+        """
+        Set how many frames to skip between YOLO inferences.
+        On skipped frames, the last detection results are redrawn.
+        
+        Args:
+            n: Run inference every Nth frame (1 = every frame, 2 = every other, etc.)
+        """
+        self._skip_frames = max(1, min(n, 10))
+        self._frame_counter = 0
+    
+    def get_skip_frames(self) -> int:
+        """Get the current skip-frame interval."""
+        return self._skip_frames
+    
+    def _redraw_detections(self, frame: np.ndarray, detections: List[Dict]) -> np.ndarray:
+        """
+        Redraw cached detection bounding boxes on a new frame.
+        Used for skip-frame mode to avoid re-running YOLO.
+        
+        Args:
+            frame: Current raw frame
+            detections: Cached detection results
+            
+        Returns:
+            Frame with bounding boxes drawn
+        """
+        annotated = frame.copy()
+        for det in detections:
+            x1, y1, x2, y2 = det['bbox']
+            conf = det['confidence']
+            
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), DETECTION_BOX_COLOR, 2)
+            
+            label = f"Person {conf * 100:.0f}%"
+            label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            cv2.rectangle(annotated, (x1, y1 - label_size[1] - 10), (x1 + label_size[0], y1), DETECTION_BOX_COLOR, -1)
+            cv2.putText(annotated, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+        
+        return annotated
+
     def detect_humans(self, frame: np.ndarray) -> Tuple[np.ndarray, int, List[Dict]]:
         """
         Detect humans in a frame and annotate with bounding boxes.
+        Supports inference downscaling and skip-frame mode for performance.
         
         Args:
             frame: Input frame (BGR format from OpenCV)
@@ -172,9 +238,31 @@ class DetectorService:
         if self._model is None:
             return frame, 0, []
         
+        # Skip-frame logic: reuse cached detections on non-inference frames
+        self._frame_counter += 1
+        if self._skip_frames > 1 and self._frame_counter % self._skip_frames != 1:
+            if self._last_annotated_detections:
+                annotated = self._redraw_detections(frame, self._last_annotated_detections)
+                return annotated, len(self._last_annotated_detections), self._last_annotated_detections
+            # No cached results yet, fall through to run inference
+        
         try:
+            h, w = frame.shape[:2]
+            
+            # Downscale frame for inference if scale < 1.0
+            if self._inference_scale < 1.0:
+                new_w = int(w * self._inference_scale)
+                new_h = int(h * self._inference_scale)
+                inference_frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                scale_x = w / new_w
+                scale_y = h / new_h
+            else:
+                inference_frame = frame
+                scale_x = 1.0
+                scale_y = 1.0
+            
             # Run YOLO inference
-            results = self._model(frame, verbose=False, conf=self._confidence)
+            results = self._model(inference_frame, verbose=False, conf=self._confidence)
             
             detections = []
             annotated_frame = frame.copy()
@@ -196,7 +284,12 @@ class DetectorService:
                         continue
                         
                     # Extract bbox and raw confidence
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    # Scale bbox back to original resolution if downscaled
+                    bx1, by1, bx2, by2 = map(float, box.xyxy[0])
+                    x1 = int(bx1 * scale_x)
+                    y1 = int(by1 * scale_y)
+                    x2 = int(bx2 * scale_x)
+                    y2 = int(by2 * scale_y)
                     raw_conf = float(box.conf[0])
                     current_bbox = (x1, y1, x2, y2)
                     
@@ -295,6 +388,7 @@ class DetectorService:
             # Update trackers list (remove lost objects)
             self._trackers = current_trackers
             self._last_detections = detections
+            self._last_annotated_detections = detections  # Cache for skip-frame redraw
             
             return annotated_frame, len(detections), detections
             

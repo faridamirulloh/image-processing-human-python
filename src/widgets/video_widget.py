@@ -32,6 +32,7 @@ class VideoWidget(QLabel):
         
         self._current_frame = None   # Latest frame (kept for screenshots & resize)
         self._is_active = False      # True when displaying video frames
+        self._fast_scaling = True    # Use fast (nearest-neighbor) scaling by default
         
         self.show_no_camera()
     
@@ -122,8 +123,9 @@ class VideoWidget(QLabel):
         
         # Create Qt image and scale to fit widget (keeping aspect ratio)
         q_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        transform_mode = Qt.FastTransformation if self._fast_scaling else Qt.SmoothTransformation
         scaled_pixmap = QPixmap.fromImage(q_image).scaled(
-            self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+            self.size(), Qt.KeepAspectRatio, transform_mode
         )
         
         self.setPixmap(scaled_pixmap)
@@ -136,6 +138,20 @@ class VideoWidget(QLabel):
     def is_active(self) -> bool:
         """Check if video is currently being displayed"""
         return self._is_active
+    
+    def set_fast_scaling(self, enabled: bool):
+        """
+        Toggle between fast (nearest-neighbor) and smooth (bilinear) scaling.
+        Fast scaling saves CPU on every frame render.
+        
+        Args:
+            enabled: True for fast scaling, False for smooth
+        """
+        self._fast_scaling = enabled
+    
+    def get_fast_scaling(self) -> bool:
+        """Check if fast scaling is enabled."""
+        return self._fast_scaling
     
     # =========================================================================
     # Qt Overrides

@@ -130,3 +130,93 @@ def get_control_bar_style() -> str:
 def get_status_bar_style() -> str:
     """Get stylesheet for the status bar."""
     return "color: #8b8b8b; font-size: 11px;"
+
+def get_settings_dialog_style() -> str:
+    """Get stylesheet for the settings dialog."""
+    return """
+        QDialog {
+            background-color: #0f0f1a;
+        }
+        QLabel {
+            color: #ffffff;
+            font-size: 13px;
+        }
+        QGroupBox {
+            color: #00d9ff;
+            font-size: 13px;
+            font-weight: bold;
+            border: 1px solid #2d2d44;
+            border-radius: 8px;
+            margin-top: 12px;
+            padding-top: 16px;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            subcontrol-position: top left;
+            padding: 2px 8px;
+        }
+        QSpinBox {
+            background-color: #1a1a2e;
+            border: 2px solid #2d2d44;
+            border-radius: 6px;
+            padding: 6px 10px;
+            color: #ffffff;
+            font-size: 13px;
+            min-width: 60px;
+        }
+        QSpinBox:hover {
+            border-color: #00d9ff;
+        }
+        QSpinBox::up-button, QSpinBox::down-button {
+            background-color: #2d2d44;
+            border: none;
+            width: 20px;
+        }
+        QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+            background-color: #00d9ff;
+        }
+        QCheckBox {
+            color: #ffffff;
+            font-size: 13px;
+            spacing: 8px;
+        }
+        QCheckBox::indicator {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            border: 2px solid #2d2d44;
+            background-color: #1a1a2e;
+        }
+        QCheckBox::indicator:checked {
+            background-color: #00d9ff;
+            border-color: #00d9ff;
+        }
+        QCheckBox::indicator:hover {
+            border-color: #00d9ff;
+        }
+    """
+
+def get_slider_style() -> str:
+    """Get stylesheet for QSlider controls."""
+    return """
+        QSlider::groove:horizontal {
+            background: #2d2d44;
+            height: 6px;
+            border-radius: 3px;
+        }
+        QSlider::handle:horizontal {
+            background: #00d9ff;
+            border: none;
+            width: 16px;
+            height: 16px;
+            margin: -5px 0;
+            border-radius: 8px;
+        }
+        QSlider::handle:horizontal:hover {
+            background: #00b8d9;
+        }
+        QSlider::sub-page:horizontal {
+            background: #00d9ff;
+            border-radius: 3px;
+        }
+    """

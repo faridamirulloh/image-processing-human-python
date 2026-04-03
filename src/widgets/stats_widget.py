@@ -43,6 +43,9 @@ class StatsWidget(QWidget):
         self._fps_label = self._create_stat_card("📈 FPS", "0.0", "#ffbb00")
         layout.addWidget(self._fps_label)
         
+        self._target_fps_label = self._create_stat_card("⚙️ Target FPS", "30", "#00d9ff")
+        layout.addWidget(self._target_fps_label)
+        
         self._model_label = self._create_stat_card("🧠 Model", "YOLOv8n", "#a55eea")
         layout.addWidget(self._model_label)
         
@@ -122,6 +125,10 @@ class StatsWidget(QWidget):
         self._status_label.value_label.setText(status)
         color = "#00ff88" if is_active else "#8b8b8b"
         self._status_label.value_label.setStyleSheet(f"color: {color};")
+    
+    def update_target_fps(self, fps: int):
+        """Update the target FPS display"""
+        self._target_fps_label.value_label.setText(str(fps))
     
     def reset_stats(self):
         """Reset all statistics to default values"""
