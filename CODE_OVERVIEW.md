@@ -1,106 +1,76 @@
-# Application Codebase & Flow Documentation
+# Ikhtisar Kode (Code Overview)
 
-This document provides a comprehensive overview of the Human Detection Application, explaining the execution flow and detailing the purpose of each code file.
+Halo! Selamat datang di dokumentasi singkat untuk proyek **Aplikasi Deteksi Manusia**. Dokumen ini akan membantu Anda memahami struktur kode dan bagaimana komponen-komponen utama bekerja bersama. Mari kita mulai! 🚀
 
-## 1. Application Flow Overview
+---
 
-1.  **Entry Point (`run.py` / `src/main.py`)**:
-    *   The user runs `run.py`.
-    *   It checks for the correct Python version (3.11).
-    *   It sets up the Python path to include the `src` directory.
-    *   It calls `main()` from `src/main.py`.
-    *   `src/main.py` initializes the `QApplication` (PyQt framework) and launches the `MainWindow`.
+## 📂 Struktur Direktori
 
-2.  **Initialization (`src/app.py` - `MainWindow`)**:
-    *   The `MainWindow` initializes the UI layout (Video Widget, Stats Widget, Control Bar).
-    *   It instantiates core services:
-        *   **CameraService**: Scans for connected cameras.
-        *   **VideoService**: Prepares for background thread video capture.
-        *   **RecordingService**: Sets up output paths for videos/screenshots.
-    *   It triggers an async pre-loading of the **DetectorService** (YOLO model).
+Berikut adalah tampilan cepat bagaimana proyek ini diatur:
 
-3.  **Runtime Loop**:
-    *   **User Action**: User selects a camera and clicks "Start".
-    *   **Video Capture**: `VideoService` runs in a separate thread, reading frames from the camera and emitting `frame_ready` signals.
-    *   **Frame Processing (`app.py` -> `_on_frame_ready`)**:
-        *   The main thread receives the frame.
-        *   If **Detection** is active: The frame is passed to `DetectorService.detect_humans()`.
-            *   YOLO inference runs (CPU).
-            *   Bounding boxes are drawn.
-            *   Person count is returned.
-        *   If **Recording** is active: The frame is passed to `RecordingService.write_frame()`.
-    *   **Display**: The processed frame (with annotations) is sent to `VideoWidget` for rendering.
-    *   **Stats Update**: `StatsWidget` is updated with the latest FPS and person count.
+```
+root/
+├── build.py                # Skrip untuk membuat file executable (.exe)
+├── run.py                  # Skrip untuk menjalankan aplikasi saat development
+├── HumanDetectionApp.spec  # Konfigurasi PyInstaller
+├── src/                    # Kode sumber utama
+│   ├── main.py             # Titik masuk (entry point) aplikasi
+│   ├── app.py              # Logika utama UI dan orkestrasi
+│   ├── services/           # Logika bisnis dan pemrosesan di balik layar
+│   ├── utils/              # Konstanta dan gaya tampilan
+│   └── widgets/            # Komponen tampilan UI kustom
+```
 
-## 2. Code Breakdown by Directory
+---
 
-### Root Directory
+## 🧩 Komponen Utama
 
-#### `run.py`
-*   **What**: The developer entry point script.
-*   **Why**: Ensures the environment is correct (Python 3.11) and paths are set up before importing the main app packages. Prevents "ModuleNotFound" errors.
+Mari kita bahas apa saja yang ada di dalam folder `src/` agar kita lebih paham fungsinya masing-masing.
 
-#### `build.py`
-*   **What**: Automation script for PyInstaller.
-*   **Why**: packages the Python application into a standalone `.exe` file for Windows. It handles including hidden imports (like `ultralytics`, `torch`) and bundling assets (icons, model files).
+### 1. Aplikasi Utama (`src/`)
 
-### `src/` Directory
+*   **`main.py`**: Ini adalah pintu masuk aplikasi kita. File ini menyiapkan aplikasi PyQt, mengatur skala tampilan agar tajam di layar resolusi tinggi, dan memunculkan jendela utama.
+*   **`app.py`**: Ini adalah "otak" dari antarmuka pengguna (UI). Di sini kita mengatur tata letak jendela, menghubungkan tombol-tombol dengan fungsinya, dan mengelola layanan-layanan lain (seperti kamera dan detektor).
 
-#### `src/main.py`
-*   **What**: The formal entry point for the PyQt application.
-*   **Why**: Separates the GUI startup logic (creating `QApplication`, setting organization names) from the window logic.
+### 2. Layanan (`src/services/`)
 
-#### `src/app.py`
-*   **What**: The Controller / Main Window.
-*   **Why**: This is the "brain" of the UI. It orchestrates everything:
-    *   Connects the UI buttons to functions (Start, Stop, Record).
-    *   Receives signals from services (new video frames).
-    *   Decides what to do with a frame (detect, record, display).
+Bagian ini berisi logika "berat" yang bekerja di belakang layar:
 
-### `src/services/` Directory
-*Logic that handles heavy lifting, separated from the UI.*
+*   **`camera_service.py`**: Bertanggung jawab untuk mencari kamera yang terhubung ke komputer Anda. Ia memastikan kita bisa mendapatkan daftar kamera yang siap digunakan.
+*   **`video_service.py`**: Menangani pengambilan gambar dari kamera secara *real-time*. Layanan ini berjalan di *thread* terpisah supaya aplikasi tidak macet saat membaca data kamera.
+*   **`detector_service.py`**: Di sinilah kecerdasan buatan (AI) bekerja! Menggunakan model YOLO (v8, v11, atau v12) untuk mendeteksi manusia dalam video. Canggih, kan? 😎
+*   **`recording_service.py`**: Mengurus penyimpanan video rekaman dan pengambilan *screenshot* (tangkapan layar) ke folder dokumen Anda.
 
-#### `camera_service.py`
-*   **What**: Camera discovery utility.
-*   **Why**: finding available cameras on Windows can be tricky. This service tries multiple backends (`DirectShow`, `MSMF`) to robustly list available webcams and their resolutions.
+### 3. Utilitas (`src/utils/`)
 
-#### `video_service.py`
-*   **What**: Background thread for video capture.
-*   **Why**: Reading from a camera is a blocking operation. If done in the main UI thread, the application would freeze/lag. Using a `QThread` ensures the UI remains responsive while video is captured in parallel.
+Folder ini berisi hal-hal pendukung agar kode lebih rapi:
 
-#### `detector_service.py`
-*   **What**: Verify wrapper around the YOLO (Ultralytics) model.
-*   **Why**: Encapsulates all AI logic.
-    *   Handles loading the model.
-    *   Runs inference (`model(frame)`).
-    *   Filters results (keeps only "person" class).
-    *   Implements **tracking & smoothing** (IoU logic) to prevent bounding boxes from flickering jitterily.
+*   **`constants.py`**: Tempat kita menyimpan pengaturan penting, seperti ukuran jendela default, daftar model YOLO, dan konfigurasi lainnya.
+*   **`styles.py`**: Berisi "resep" tampilan (CSS) untuk membuat aplikasi terlihat modern dan menarik.
 
-#### `recording_service.py`
-*   **What**: Media I/O handler.
-*   **Why**: Manages saving video files (`.mp4`) and screenshots (`.png`). Handles file naming (timestamps) and output directory management.
+### 4. Widget (`src/widgets/`)
 
-### `src/widgets/` Directory
-*Reusable UI components.*
+Komponen tampilan khusus yang kita buat sendiri:
 
-#### `video_widget.py`
-*   **What**: The screen that displays the camera feed.
-*   **Why**: A standard `QLabel` isn't enough. This widget handles:
-    *   Aspect ratio preservation (so the video doesn't stretch).
-    *   Efficient conversion from OpenCV (BGR) frames to Qt (RGB) images.
-    *   Visual states (Loading, Error, No Camera).
+*   **`video_widget.py`**: Area untuk menampilkan video dari kamera. Widget ini pintar menyesuaikan ukuran gambar agar selalu pas dan proporsional.
+*   **`stats_widget.py`**: Panel di samping kanan yang menampilkan statistik, seperti jumlah orang yang terdeteksi dan kecepatan pemrosesan (FPS).
 
-#### `stats_widget.py`
-*   **What**: The sidebar showing FPS, count, etc.
-*   **Why**: Keeps the main `app.py` layout clean by componentizing the statistics display. Updating one stat (`update_fps`) acts on this widget.
+---
 
-### `src/utils/` Directory
-*Helpers and configuration.*
+## 🛠️ Cara Menjalankan
 
-#### `constants.py`
-*   **What**: Global configuration variables.
-*   **Why**: Avoids "magic numbers" in the code. Stores window size, default model selection, color definitions, and paths in one place for easy editing.
+Untuk menjalankan aplikasi saat sedang mengembangkan fitur baru (mode *development*), Anda cukup menjalankan perintah ini di terminal:
 
-#### `styles.py`
-*   **What**: CSS-like stylesheets (QSS) for PyQt.
-*   **Why**: Keeps the UI styling (colors, fonts, borders) separate from the Python logic. Allows for easy theming (Dark Mode).
+```bash
+python run.py
+```
+
+Jika Anda ingin membuat aplikasi ini menjadi satu file `.exe` yang bisa dijalankan di komputer lain tanpa perlu instal Python, gunakan perintah:
+
+```bash
+python build.py
+```
+
+---
+
+Semoga panduan ini membantu Anda menjelajahi kode dengan lebih mudah! Jika ada pertanyaan, jangan ragu untuk mengecek komentar di dalam kode ya. Selamat coding! 💻✨

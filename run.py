@@ -1,12 +1,12 @@
 """
-Run script for development
-Requires Python 3.11
+Skrip untuk menjalankan aplikasi dalam mode development
+Membutuhkan Python 3.11
 """
 
 import sys
 import os
 
-# Check Python version
+# Periksa versi Python
 if sys.version_info[:2] != (3, 11):
     print("=" * 50)
     print("ERROR: Python 3.11 is required!")
@@ -18,7 +18,7 @@ if sys.version_info[:2] != (3, 11):
     print("=" * 50)
     sys.exit(1)
 
-# Add src directory to Python path so imports work correctly
+# Tambahkan direktori src ke path Python agar impor berfungsi dengan benar
 src_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
 sys.path.insert(0, src_dir)
 

@@ -1,6 +1,6 @@
 """
-Video Widget - Displays the live camera / detection feed.
-Handles frame rendering, aspect ratio scaling, and status messages.
+Widget Video - Menampilkan umpan kamera / deteksi langsung.
+Menangani rendering frame, penskalaan rasio aspek, dan pesan status.
 """
 
 import cv2
@@ -12,8 +12,8 @@ from PyQt5.QtGui import QImage, QPixmap
 
 class VideoWidget(QLabel):
     """
-    Displays live video frames inside a styled QLabel.
-    Automatically scales frames to fit while keeping the aspect ratio.
+    Menampilkan frame video langsung di dalam QLabel bergaya.
+    Secara otomatis menskalakan frame agar pas sambil mempertahankan rasio aspek.
     """
     
     def __init__(self, parent=None):
@@ -37,11 +37,11 @@ class VideoWidget(QLabel):
         self.show_no_camera()
     
     # =========================================================================
-    # Status Messages (shown when no video is playing)
+    # Pesan Status (ditampilkan saat tidak ada video yang diputar)
     # =========================================================================
     
     def show_no_camera(self):
-        """Show placeholder when no camera is connected"""
+        """Tampilkan placeholder saat tidak ada kamera yang terhubung"""
         self._is_active = False
         self._current_frame = None
         self.setText("📷  No Camera Connected\n\nPlease connect a camera and click Refresh")
@@ -57,7 +57,7 @@ class VideoWidget(QLabel):
         """)
     
     def show_loading(self, camera_name: str = ""):
-        """Show loading state while camera is connecting"""
+        """Tampilkan status memuat saat kamera terhubung"""
         self._is_active = False
         self._current_frame = None
         label = f"⏳  Connecting to camera...\n\n{camera_name}" if camera_name else "⏳  Connecting to camera..."
@@ -74,7 +74,7 @@ class VideoWidget(QLabel):
         """)
     
     def show_error(self, message: str):
-        """Show error message when camera fails"""
+        """Tampilkan pesan kesalahan saat kamera gagal"""
         self._is_active = False
         self._current_frame = None
         self.setText(f"❌  Camera Error\n\n{message}")
@@ -90,22 +90,26 @@ class VideoWidget(QLabel):
         """)
     
     # =========================================================================
-    # Frame Display
+    # Tampilan Frame
     # =========================================================================
     
     def update_frame(self, frame: np.ndarray):
         """
-        Display a new video frame.
+        Tampilkan frame video baru.
         
         Args:
             frame: BGR frame from OpenCV
         """
         if frame is None:
             return
+        
+        # Hindari crash saat widget belum memiliki ukuran (saat layout awal)
+        if self.width() <= 0 or self.height() <= 0:
+            return
             
         self._current_frame = frame
         
-        # Only update style when switching from inactive to active state
+        # Hanya perbarui gaya saat beralih dari status tidak aktif ke aktif
         if not self._is_active:
             self._is_active = True
             self.setStyleSheet("""
@@ -116,12 +120,12 @@ class VideoWidget(QLabel):
                 }
             """)
         
-        # Convert BGR (OpenCV) → RGB (Qt) for correct colors
+        # Konversi BGR (OpenCV) → RGB (Qt) untuk warna yang benar
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb_frame.shape
         bytes_per_line = ch * w
         
-        # Create Qt image and scale to fit widget (keeping aspect ratio)
+        # Buat gambar Qt dan skalakan agar pas dengan widget (mempertahankan rasio aspek)
         q_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
         transform_mode = Qt.FastTransformation if self._fast_scaling else Qt.SmoothTransformation
         scaled_pixmap = QPixmap.fromImage(q_image).scaled(
@@ -131,12 +135,12 @@ class VideoWidget(QLabel):
         self.setPixmap(scaled_pixmap)
     
     def clear_display(self):
-        """Clear video and show the no-camera placeholder"""
+        """Hapus video dan tampilkan placeholder tanpa kamera"""
         self._current_frame = None
         self.show_no_camera()
     
     def is_active(self) -> bool:
-        """Check if video is currently being displayed"""
+        """Periksa apakah video sedang ditampilkan"""
         return self._is_active
     
     def set_fast_scaling(self, enabled: bool):
@@ -154,17 +158,17 @@ class VideoWidget(QLabel):
         return self._fast_scaling
     
     # =========================================================================
-    # Qt Overrides
+    # Override Qt
     # =========================================================================
     
     def resizeEvent(self, event):
-        """Re-scale the current frame when the widget is resized"""
+        """Ubah skala frame saat ini saat widget diubah ukurannya"""
         super().resizeEvent(event)
         if self._current_frame is not None:
-            # We call update_frame to re-scale, but we don't need to re-set the style
-            # logic in update_frame handles it efficiently
+            # Kami memanggil update_frame untuk mengubah skala, tetapi tidak perlu mengatur ulang gaya
+            # logika di update_frame menanganinya secara efisien
             self.update_frame(self._current_frame)
     
     def sizeHint(self) -> QSize:
-        """Default suggested size"""
+        """Ukuran yang disarankan default"""
         return QSize(640, 480)

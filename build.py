@@ -1,5 +1,5 @@
 """
-Build script for creating Windows executable
+Skrip build untuk membuat executable Windows
 """
 
 import os
@@ -9,7 +9,7 @@ import shutil
 
 
 def build():
-    """Build the Windows executable using PyInstaller"""
+    """Build executable Windows menggunakan PyInstaller"""
     
     # Project paths
     project_dir = os.path.dirname(os.path.abspath(__file__))
@@ -17,39 +17,39 @@ def build():
     dist_dir = os.path.join(project_dir, "dist")
     build_dir = os.path.join(project_dir, "build")
     
-    # Clean previous builds
+    # Bersihkan build sebelumnya
     if os.path.exists(dist_dir):
         shutil.rmtree(dist_dir)
     if os.path.exists(build_dir):
         shutil.rmtree(build_dir)
         
-    # Check if PyInstaller is available
+    # Periksa apakah PyInstaller tersedia
     try:
         subprocess.run([sys.executable, "-m", "PyInstaller", "--version"], capture_output=True, check=True)
     except subprocess.CalledProcessError:
         print("Error: PyInstaller is not installed. Run 'pip install pyinstaller' first.")
         sys.exit(1)
     
-    # PyInstaller command construction
+    # Konstruksi perintah PyInstaller
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--name=HumanDetectionApp",
         "--onefile",
         "--windowed",
         "--noconfirm",
-        # Hidden imports for ultralytics and torch
+        # Impor tersembunyi untuk ultralytics dan torch
         "--hidden-import=ultralytics",
         "--hidden-import=torch",
         "--hidden-import=cv2",
         "--hidden-import=numpy",
         "--hidden-import=PIL",
-        # Collect ultralytics data files
+        # Kumpulkan file data ultralytics
         "--collect-data=ultralytics",
-        # Add source directory to path
+        # Tambahkan direktori sumber ke path
         f"--paths={src_dir}",
     ]
     
-    # Add YOLO model files if they exist (only nano and small for size)
+    # Tambahkan file model YOLO jika ada (hanya nano dan small untuk ukuran)
     model_files = [
         "yolov8n.pt", "yolov8s.pt",
         "yolo11n.pt", "yolo11s.pt", 
@@ -60,15 +60,15 @@ def build():
     for model_file in model_files:
         model_path = os.path.join(project_dir, model_file)
         if os.path.exists(model_path):
-            # Add model to bundled data (source;destination)
+            # Tambahkan model ke data yang dibundel (sumber;tujuan)
             cmd.append(f"--add-data={model_path};.")
             included_models.append(model_file)
             print(f"Including model: {model_file}")
     
-    # Entry point (must be last)
+    # Titik masuk (harus yang terakhir)
     cmd.append(os.path.join(src_dir, "main.py"))
     
-    # Add icon if it exists
+    # Tambahkan ikon jika ada
     icon_path = os.path.join(project_dir, "assets", "icon.ico")
     if os.path.exists(icon_path):
         cmd.insert(-1, f"--icon={icon_path}")
@@ -76,7 +76,7 @@ def build():
     print("Building executable...")
     print(f"Command: {' '.join(cmd)}")
     
-    # Run PyInstaller
+    # Jalankan PyInstaller
     result = subprocess.run(cmd, cwd=project_dir)
     
     if result.returncode == 0:
