@@ -67,14 +67,20 @@ class DetectorService:
         self._torch_available = False
         self._init_error: Optional[str] = None
         
-        # Periksa apakah PyTorch tersedia dan optimalkan CPU
+        # Periksa apakah PyTorch tersedia
         try:
             import torch
             self._torch_available = True
-            self._optimize_cpu()
         except Exception as e:
             self._init_error = str(e)
             print(f"Warning: PyTorch not available: {e}")
+        
+        # Optimalkan CPU (non-fatal — jangan gagalkan pemuatan model)
+        if self._torch_available:
+            try:
+                self._optimize_cpu()
+            except Exception as e:
+                print(f"Warning: CPU optimization failed (non-fatal): {e}")
         
         # Aktifkan optimisasi OpenCV (SSE, AVX, dll)
         cv2.setUseOptimized(True)

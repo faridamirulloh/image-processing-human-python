@@ -66,9 +66,6 @@ def get_button_style(color: str, hover_color: str) -> str:
             font-weight: bold;
             font-size: 14px;
             padding: 4px 8px 4px 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }}
         QPushButton:hover {{
             background-color: {hover_color};
@@ -92,10 +89,7 @@ def get_icon_button_style(color: str, hover_color: str) -> str:
             color: #ffffff;
             font-weight: bold;
             font-size: 18px;
-            padding: 4px 8px 8px 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            padding: 4px 8px 4px 8px;
         }}
         QPushButton:hover {{
             background-color: {hover_color};
@@ -132,7 +126,7 @@ def get_status_bar_style() -> str:
     return "color: #8b8b8b; font-size: 11px;"
 
 def get_settings_dialog_style() -> str:
-    """Get stylesheet for the settings dialog."""
+    """Dapatkan stylesheet untuk dialog pengaturan."""
     return """
         QDialog {
             background-color: #0f0f1a;
@@ -197,7 +191,7 @@ def get_settings_dialog_style() -> str:
     """
 
 def get_slider_style() -> str:
-    """Get stylesheet for QSlider controls."""
+    """Dapatkan stylesheet untuk kontrol QSlider."""
     return """
         QSlider::groove:horizontal {
             background: #2d2d44;

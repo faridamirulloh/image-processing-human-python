@@ -34,6 +34,7 @@ class StatsWidget(QWidget):
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
         separator.setStyleSheet("background-color: #2d2d44;")
+        separator.setFixedHeight(2)
         layout.addWidget(separator)
         
         # Kartu statistik
@@ -58,10 +59,9 @@ class StatsWidget(QWidget):
         self.setStyleSheet("""
             StatsWidget {
                 background-color: #16213e;
-                border-radius: 10px;
+                border-radius: 8px;
             }
         """)
-        self.setMinimumWidth(120)
     
     def _create_stat_card(self, title: str, value: str, color: str) -> QFrame:
         """
@@ -78,8 +78,8 @@ class StatsWidget(QWidget):
         card = QFrame()
         card.setStyleSheet("""
             QFrame {
-                background-color: #1a1a2e;
-                border-radius: 6px;
+                background-color: #0f0f1a;
+                border-radius: 8px;
                 padding: 2px;
             }
         """)
@@ -98,7 +98,6 @@ class StatsWidget(QWidget):
         value_label = QLabel(value)
         value_label.setFont(QFont("Segoe UI", 18, QFont.Bold))
         value_label.setStyleSheet(f"color: {color};")
-        value_label.setAlignment(Qt.AlignLeft)
         layout.addWidget(value_label)
         
         # Simpan referensi untuk pembaruan nanti
@@ -120,14 +119,14 @@ class StatsWidget(QWidget):
         short_name = model.split(" - ")[0] if " - " in model else model
         self._model_label.value_label.setText(short_name)
     
-    def update_status(self, status: str, is_active: bool = False):
+    def update_status(self, status: str, is_active: bool):
         """Perbarui tampilan status dengan warna yang sesuai"""
         self._status_label.value_label.setText(status)
         color = "#00ff88" if is_active else "#8b8b8b"
         self._status_label.value_label.setStyleSheet(f"color: {color};")
     
     def update_target_fps(self, fps: int):
-        """Update the target FPS display"""
+        """Perbarui tampilan target FPS"""
         self._target_fps_label.value_label.setText(str(fps))
     
     def reset_stats(self):

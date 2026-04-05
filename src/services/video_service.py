@@ -6,8 +6,8 @@ Memancarkan frame melalui sinyal PyQt untuk pemrosesan dan tampilan.
 import cv2
 import time
 import numpy as np
-from typing import Optional, Tuple
-from PyQt5.QtCore import QThread, pyqtSignal, QMutex, QMutexLocker
+from typing import Optional
+from PyQt5.QtCore import QThread, QMutex, QMutexLocker, pyqtSignal
 
 from utils.constants import DEFAULT_CAPTURE_FPS
 
@@ -25,12 +25,12 @@ class VideoService(QThread):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._camera_index: int = 0
+        self._camera_index = 0
+        self._running = False
         self._capture: Optional[cv2.VideoCapture] = None
-        self._running: bool = False
-        self._mutex = QMutex()  # Thread safety for camera access
-        self._target_fps: int = DEFAULT_CAPTURE_FPS
-        self._requested_resolution: Optional[Tuple[int, int]] = None
+        self._mutex = QMutex()
+        self._target_fps = DEFAULT_CAPTURE_FPS
+        self._requested_resolution = None  # (width, height) atau None
     
     def _open_camera(self, index: int) -> Optional[cv2.VideoCapture]:
         """
@@ -47,12 +47,11 @@ class VideoService(QThread):
         backends = [
             (cv2.CAP_DSHOW, "DirectShow"),
             (cv2.CAP_MSMF, "MSMF"),
-            (cv2.CAP_ANY, "Auto"),
+            (cv2.CAP_ANY, "Default"),
         ]
         
         for backend, name in backends:
             try:
-                print(f"Trying to open camera {index} with {name}...")
                 cap = cv2.VideoCapture(index, backend)
                 
                 if cap.isOpened():
@@ -69,39 +68,36 @@ class VideoService(QThread):
                         print(f"✓ Camera {index} opened with {name} backend")
                         return cap
                     else:
-                        print(f"✗ {name}: Camera opened but couldn't read frame")
                         cap.release()
                 else:
-                    print(f"✗ {name}: Failed to open camera")
+                    cap.release()
+                    
             except Exception as e:
-                print(f"✗ {name}: Exception: {e}")
+                print(f"✗ Failed to open camera {index} with {name}: {e}")
                 continue
         
         return None
     
     def set_target_fps(self, fps: int):
         """
-        Change the target FPS at runtime.
-        Takes effect immediately on the next loop iteration.
+        Set target FPS untuk penangkapan frame (berlaku pada frame berikutnya).
         
         Args:
-            fps: Target frames per second (clamped to 1-60)
+            fps: Target FPS (di-clamp ke 1-60)
         """
-        from utils.constants import MIN_FPS, MAX_FPS
-        self._target_fps = max(MIN_FPS, min(fps, MAX_FPS))
+        self._target_fps = max(1, min(fps, 60))
     
     def get_target_fps(self) -> int:
-        """Get the current target FPS."""
+        """Dapatkan target FPS saat ini."""
         return self._target_fps
     
     def set_camera_resolution(self, width: int, height: int):
         """
-        Request a specific camera resolution.
-        Applied on the next start_capture() call.
+        Minta resolusi kamera tertentu (diterapkan saat kamera dibuka).
         
         Args:
-            width: Requested frame width
-            height: Requested frame height
+            width: Lebar yang diminta
+            height: Tinggi yang diminta
         """
         self._requested_resolution = (width, height)
     
@@ -165,9 +161,9 @@ class VideoService(QThread):
         try:
             self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         except:
-            pass  # Some cameras don't support this
+            pass  # Beberapa kamera tidak mendukung ini
         
-        # Apply requested resolution if set
+        # Terapkan resolusi yang diminta jika diatur
         if self._requested_resolution is not None:
             w, h = self._requested_resolution
             self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, w)
@@ -179,9 +175,6 @@ class VideoService(QThread):
         max_failures = 30
         
         while self._running:
-            frame_delay = 1.0 / self._target_fps  # Recalculate each iteration for live FPS changes
-            loop_start = time.time()
-            
             # Akses kamera aman thread
             with QMutexLocker(self._mutex):
                 if self._capture is None or not self._capture.isOpened():
@@ -198,20 +191,11 @@ class VideoService(QThread):
                     break
                 time.sleep(0.05)  # Jeda singkat sebelum coba lagi
                 continue
-            
-            # Kontrol kecepatan frame
-            processing_time = time.time() - loop_start
-            if processing_time < frame_delay:
-                time.sleep(frame_delay - processing_time)
         
         # Pembersihan saat keluar
         if self._capture is not None:
             self._capture.release()
             self._capture = None
-    
-    def set_target_fps(self, fps: int):
-        """Set target FPS for frame capture (takes effect on next frame)."""
-        self._target_fps = max(1, min(fps, 60))
     
     def is_running(self) -> bool:
         """Periksa apakah penangkapan sedang berjalan"""

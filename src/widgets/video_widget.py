@@ -5,7 +5,7 @@ Menangani rendering frame, penskalaan rasio aspek, dan pesan status.
 
 import cv2
 import numpy as np
-from PyQt5.QtWidgets import QLabel, QSizePolicy
+from PyQt5.QtWidgets import QLabel
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QImage, QPixmap
 
@@ -19,16 +19,8 @@ class VideoWidget(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         
-        self.setMinimumSize(320, 240)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet("""
-            QLabel {
-                background-color: #1a1a2e;
-                border: 2px solid #16213e;
-                border-radius: 8px;
-            }
-        """)
+        self.setMinimumSize(320, 240)
         
         self._current_frame = None   # Latest frame (kept for screenshots & resize)
         self._is_active = False      # True when displaying video frames
@@ -48,11 +40,12 @@ class VideoWidget(QLabel):
         self.setStyleSheet("""
             QLabel {
                 background-color: #1a1a2e;
-                border: 2px solid #16213e;
-                border-radius: 8px;
-                color: #8b8b8b;
-                font-size: 16px;
-                padding: 20px;
+                color: #5a5a8a;
+                font-size: 18px;
+                font-weight: bold;
+                border: 2px dashed #2d2d44;
+                border-radius: 12px;
+                padding: 40px;
             }
         """)
     
@@ -65,11 +58,12 @@ class VideoWidget(QLabel):
         self.setStyleSheet("""
             QLabel {
                 background-color: #1a1a2e;
-                border: 2px solid #ffa502;
-                border-radius: 8px;
-                color: #ffa502;
-                font-size: 16px;
-                padding: 20px;
+                color: #00d9ff;
+                font-size: 18px;
+                font-weight: bold;
+                border: 2px solid #00d9ff;
+                border-radius: 12px;
+                padding: 40px;
             }
         """)
     
@@ -81,11 +75,12 @@ class VideoWidget(QLabel):
         self.setStyleSheet("""
             QLabel {
                 background-color: #1a1a2e;
-                border: 2px solid #ff4757;
-                border-radius: 8px;
                 color: #ff4757;
                 font-size: 16px;
-                padding: 20px;
+                font-weight: bold;
+                border: 2px solid #ff4757;
+                border-radius: 12px;
+                padding: 40px;
             }
         """)
     
@@ -114,9 +109,9 @@ class VideoWidget(QLabel):
             self._is_active = True
             self.setStyleSheet("""
                 QLabel {
-                    background-color: #1a1a2e;
-                    border: 2px solid #00d9ff;
-                    border-radius: 8px;
+                    background-color: #000000;
+                    border: 2px solid #2d2d44;
+                    border-radius: 12px;
                 }
             """)
         
@@ -165,8 +160,6 @@ class VideoWidget(QLabel):
         """Ubah skala frame saat ini saat widget diubah ukurannya"""
         super().resizeEvent(event)
         if self._current_frame is not None:
-            # Kami memanggil update_frame untuk mengubah skala, tetapi tidak perlu mengatur ulang gaya
-            # logika di update_frame menanganinya secara efisien
             self.update_frame(self._current_frame)
     
     def sizeHint(self) -> QSize:

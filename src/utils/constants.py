@@ -30,7 +30,7 @@ YOLO_MODELS = {
         "size": "6.3 MB"
     },
     "YOLOv8s - Balanced": {
-        "file": "yolov8s.pt", 
+        "file": "yolov8s.pt",
         "description": "Model Kecil - Kecepatan dan akurasi seimbang",
         "size": "22.5 MB"
     },
@@ -68,7 +68,7 @@ DETECTION_BOX_COLOR = (0, 255, 0)  # Kotak pembatas hijau
 # =============================================================================
 # Pengaturan Kamera
 # =============================================================================
-MAX_CAMERA_INDEX = 10  # Indeks kamera maksimum untuk dipindai saat mencari kamera
+MAX_CAMERA_INDEX = 10  # Indeks kamera maksimum untuk dipindai
 
 # =============================================================================
 # Perekaman & Tangkapan
