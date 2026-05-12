@@ -1,6 +1,6 @@
 """
 Widget Statistik - Menampilkan statistik deteksi real-time.
-Menampilkan jumlah api, asap, FPS, info model, dan status deteksi.
+Menampilkan jumlah api, FPS, info model, dan status deteksi.
 """
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
@@ -41,16 +41,13 @@ class StatsWidget(QWidget):
         self._fire_count_label = self._create_stat_card("🔥 Fire", "0", "#ff4444")
         layout.addWidget(self._fire_count_label)
         
-        self._smoke_count_label = self._create_stat_card("💨 Smoke", "0", "#4488ff")
-        layout.addWidget(self._smoke_count_label)
-        
         self._fps_label = self._create_stat_card("📈 FPS", "0.0", "#ffbb00")
         layout.addWidget(self._fps_label)
         
         self._target_fps_label = self._create_stat_card("⚙️ Target FPS", "1", "#00d9ff")
         layout.addWidget(self._target_fps_label)
         
-        self._model_label = self._create_stat_card("🧠 Model", "YOLOv10", "#a55eea")
+        self._model_label = self._create_stat_card("🧠 Model", "YOLO-MP", "#a55eea")
         layout.addWidget(self._model_label)
         
         self._status_label = self._create_stat_card("📍 Status", "Stopped", "#8b8b8b")
@@ -109,10 +106,9 @@ class StatsWidget(QWidget):
         
         return card
     
-    def update_detection_counts(self, fire_count: int, smoke_count: int):
-        """Perbarui tampilan jumlah api dan asap"""
+    def update_detection_counts(self, fire_count: int):
+        """Perbarui tampilan jumlah api"""
         self._fire_count_label.value_label.setText(str(fire_count))
-        self._smoke_count_label.value_label.setText(str(smoke_count))
     
     def update_fps(self, fps: float):
         """Perbarui tampilan FPS"""
@@ -135,6 +131,6 @@ class StatsWidget(QWidget):
     
     def reset_stats(self):
         """Atur ulang semua statistik ke nilai default"""
-        self.update_detection_counts(0, 0)
+        self.update_detection_counts(0)
         self.update_fps(0.0)
         self.update_status("Stopped", False)

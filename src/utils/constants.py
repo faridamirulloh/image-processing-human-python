@@ -8,7 +8,7 @@ import os
 # =============================================================================
 # Window Settings
 # =============================================================================
-WINDOW_TITLE = "Poltekad - Fire & Smoke Detection"
+WINDOW_TITLE = "Poltekad - Fire Detection"
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 
@@ -18,25 +18,27 @@ WINDOW_HEIGHT = 720
 CONFIDENCE_THRESHOLD = 0.25  # Kepercayaan minimum untuk deteksi (0.0 - 1.0)
 
 # =============================================================================
-# Model YOLO - Fire & Smoke Detection
-# Custom-trained YOLOv10 model for fire and smoke detection
+# Model YOLO - Fire Detection
+# YOLO-MP model and compatibility modules live in YOLO-MP-master.
 # =============================================================================
-FIRE_SMOKE_MODEL = {
-    "name": "YOLOv10 Fire & Smoke",
-    "file": "best.pt",
-    "description": "YOLOv10 model fine-tuned for fire and smoke detection",
-    "size": "64 MB"
+YOLO_MP_DIR = "YOLO-MP-master"
+YOLO_MP_MODEL_FILE = "YOLO-MP.pt"
+
+FIRE_MODEL = {
+    "name": "YOLO-MP Fire",
+    "file": os.path.join(YOLO_MP_DIR, YOLO_MP_MODEL_FILE),
+    "description": "YOLO-MP lightweight forest fire detection model",
+    "size": "5 MB"
 }
 
-DEFAULT_MODEL = FIRE_SMOKE_MODEL["name"]
+DEFAULT_MODEL = FIRE_MODEL["name"]
 
 # =============================================================================
 # Warna Anotasi Deteksi (format BGR untuk OpenCV)
-# Per-class colors for fire and smoke
+# Per-class colors for fire detection
 # =============================================================================
 DETECTION_CLASS_COLORS = {
     "fire": (0, 0, 255),       # Red in BGR
-    "smoke": (255, 150, 50),   # Blue in BGR
 }
 DETECTION_DEFAULT_COLOR = (0, 255, 0)  # Fallback green
 
@@ -48,7 +50,7 @@ MAX_CAMERA_INDEX = 10  # Indeks kamera maksimum untuk dipindai
 # =============================================================================
 # Perekaman & Tangkapan
 # =============================================================================
-DEFAULT_OUTPUT_FOLDER = os.path.join(os.path.expanduser("~"), "Documents", "FireSmokeDetectionApp")
+DEFAULT_OUTPUT_FOLDER = os.path.join(os.path.expanduser("~"), "Documents", "FireDetectionApp")
 RECORDING_FPS = 20.0        # Output video framerate
 RECORDING_CODEC = "mp4v"    # FourCC codec for .mp4 output
 

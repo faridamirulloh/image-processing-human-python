@@ -1,6 +1,6 @@
 """
 Aplikasi Utama
-Deteksi api dan asap secara real-time menggunakan model YOLOv10 kustom.
+Deteksi api secara real-time menggunakan model YOLO-MP.
 Menangani tata letak UI, manajemen kamera, perekaman, dan proses deteksi.
 """
 
@@ -22,7 +22,8 @@ from services import CameraService, VideoService, DetectorService, RecordingServ
 from widgets import VideoWidget, StatsWidget
 from utils.constants import (
     WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT,
-    DEFAULT_CAPTURE_FPS, MIN_FPS, MAX_FPS
+    DEFAULT_CAPTURE_FPS, MIN_FPS, MAX_FPS,
+    DEFAULT_MODEL
 )
 from utils import styles
 
@@ -32,7 +33,7 @@ from utils import styles
 # =============================================================================
 
 class ModelLoaderThread(QThread):
-    """Thread latar belakang untuk memuat model deteksi api/asap tanpa memblokir UI."""
+    """Thread latar belakang untuk memuat model deteksi api tanpa memblokir UI."""
     
     # Signal: (success: bool, model_name: str, error: str)
     model_loaded = pyqtSignal(bool, str, str)
@@ -280,7 +281,7 @@ class SettingsDialog(QDialog):
 # =============================================================================
 
 class MainWindow(QMainWindow):
-    """Aplikasi utama deteksi api & asap dengan pratinjau kamera dan perekaman."""
+    """Aplikasi utama deteksi api dengan pratinjau kamera dan perekaman."""
     
     def __init__(self):
         super().__init__()
@@ -322,7 +323,6 @@ class MainWindow(QMainWindow):
         self._last_detection_time = 0.0
         self._cached_detections = []    # Last YOLO results for redraw
         self._cached_fire_count = 0
-        self._cached_smoke_count = 0
         
         # Inisiasi UI, hubungkan sinyal, pindai kamera, dan load model AI
         self._init_ui()
@@ -587,10 +587,10 @@ class MainWindow(QMainWindow):
     def _preload_model(self):
         """Load model AI di thread latar belakang saat startup."""
         if self._detector_service is None:
-            self._load_model_async("YOLOv10 Fire & Smoke")
+            self._load_model_async(DEFAULT_MODEL)
     
     def _load_model_async(self, model_name: str):
-        """Muat model deteksi api/asap di thread latar belakang."""
+        """Muat model deteksi api di thread latar belakang."""
         if self._is_loading_model:
             self._status_bar.showMessage("⏳ Model masih dimuat, harap tunggu...")
             return
@@ -627,7 +627,7 @@ class MainWindow(QMainWindow):
                 "Peringatan Model AI",
                 f"Gagal memuat model {model_name}:\n\n{error}\n\n"
                 "Deteksi mungkin tidak berfungsi. "
-                "Periksa file model best.pt."
+                "Periksa folder YOLO-MP-master dan file YOLO-MP.pt."
             )
     
     # =========================================================================
@@ -683,7 +683,7 @@ class MainWindow(QMainWindow):
         
         # Muat model AI jika belum dimuat sebelumnya
         if self._detector_service is None:
-            model_name = "YOLOv10 Fire & Smoke"
+            model_name = DEFAULT_MODEL
             self._status_bar.showMessage("Loading AI model...")
             
             # Coba muat secara sinkron jika belum ada sama sekali
@@ -805,13 +805,12 @@ class MainWindow(QMainWindow):
             if should_detect:
                 # Run YOLO and cache results
                 self._last_detection_time = current_time
-                annotated_frame, fire_count, smoke_count, detections = self._detector_service.detect_fire_smoke(frame)
+                annotated_frame, fire_count, detections = self._detector_service.detect_fire(frame)
                 self._cached_detections = detections
                 self._cached_fire_count = fire_count
-                self._cached_smoke_count = smoke_count
                 display_frame = annotated_frame
                 
-                self._stats_widget.update_detection_counts(fire_count, smoke_count)
+                self._stats_widget.update_detection_counts(fire_count)
                 
                 # Track detection FPS
                 if self._last_frame_time > 0:

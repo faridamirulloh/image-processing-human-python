@@ -1,5 +1,5 @@
 """
-Aplikasi Deteksi Api & Asap - Entry Point
+Aplikasi Deteksi Api - Entry Point
 Menangani inisialisasi aplikasi, optimisasi CPU, dan error startup.
 """
 
@@ -84,8 +84,8 @@ def main():
     
     # Buat aplikasi
     app = QApplication(sys.argv)
-    app.setApplicationName("Fire & Smoke Detection App")
-    app.setOrganizationName("FireSmokeDetection")
+    app.setApplicationName("Fire Detection App")
+    app.setOrganizationName("FireDetection")
     
     # Optimalkan CPU: prioritas tinggi + semua core
     _boost_process_priority()
@@ -109,7 +109,7 @@ def main():
         
         QMessageBox.critical(
             None,
-            "Error - Fire & Smoke Detection App",
+            "Error - Fire Detection App",
             f"Aplikasi gagal dimulai:\n\n{e}\n\n"
             "Pastikan semua dependensi terinstall:\n"
             "  pip install -r requirements.txt"

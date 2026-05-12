@@ -14,6 +14,7 @@ def build():
     # Project paths
     project_dir = os.path.dirname(os.path.abspath(__file__))
     src_dir = os.path.join(project_dir, "src")
+    yolo_mp_dir = os.path.join(project_dir, "YOLO-MP-master")
     dist_dir = os.path.join(project_dir, "dist")
     build_dir = os.path.join(project_dir, "build")
     
@@ -33,7 +34,7 @@ def build():
     # Konstruksi perintah PyInstaller
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--name=FireSmokeDetectionApp",
+        "--name=FireDetectionApp",
         "--onefile",
         "--windowed",
         "--noconfirm",
@@ -45,22 +46,21 @@ def build():
         "--hidden-import=PIL",
         # Kumpulkan file data ultralytics
         "--collect-data=ultralytics",
+        "--collect-submodules=ultralytics",
         # Tambahkan direktori sumber ke path
+        f"--paths={yolo_mp_dir}",
         f"--paths={src_dir}",
     ]
     
     # Tambahkan model file jika ada
-    model_file = "best.pt"
-    model_path = os.path.join(project_dir, model_file)
-    if not os.path.exists(model_path):
-        # Periksa di subdirektori referensi
-        model_path = os.path.join(project_dir, "YOLOv10-Fire-and-Smoke-Detection", model_file)
+    model_file = "YOLO-MP.pt"
+    model_path = os.path.join(yolo_mp_dir, model_file)
     
     if os.path.exists(model_path):
-        cmd.append(f"--add-data={model_path};.")
+        cmd.append(f"--add-data={model_path};YOLO-MP-master")
         print(f"Including model: {model_file}")
     else:
-        print(f"WARNING: Model file {model_file} not found!")
+        print(f"WARNING: Model file {model_file} not found in YOLO-MP-master!")
     
     # Titik masuk (harus yang terakhir)
     cmd.append(os.path.join(src_dir, "main.py"))
@@ -80,7 +80,7 @@ def build():
         print("\n" + "="*50)
         print("BUILD SUCCESSFUL!")
         print("="*50)
-        print(f"\nExecutable created at: {os.path.join(dist_dir, 'FireSmokeDetectionApp.exe')}")
+        print(f"\nExecutable created at: {os.path.join(dist_dir, 'FireDetectionApp.exe')}")
         print("\nNote: The first run may take longer as it initializes the model.")
     else:
         print("\n" + "="*50)

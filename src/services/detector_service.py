@@ -1,17 +1,19 @@
 """
-Layanan Detektor - Deteksi Api dan Asap YOLO
-Menyediakan deteksi api dan asap berbasis AI menggunakan model YOLOv10 kustom.
+Layanan Detektor - Deteksi Api YOLO
+Menyediakan deteksi api berbasis AI menggunakan model YOLO-MP.
 Inferensi hanya CPU — dioptimalkan untuk menggunakan semua core CPU.
 """
 
 import os
 import sys
+import inspect
+import importlib
 import cv2
 import numpy as np
 from typing import Tuple, List, Dict, Optional
 
 from utils.constants import (
-    FIRE_SMOKE_MODEL,
+    FIRE_MODEL,
     DEFAULT_MODEL,
     CONFIDENCE_THRESHOLD,
     DETECTION_CLASS_COLORS,
@@ -27,7 +29,7 @@ BOX_SMOOTHING_FACTOR = 0.3
 
 
 class DetectorService:
-    """Layanan deteksi api dan asap menggunakan model YOLOv10 kustom."""
+    """Layanan deteksi api menggunakan model YOLO-MP."""
     
     def __init__(self, model_name: str = DEFAULT_MODEL, use_gpu: bool = False):
         self._model = None
@@ -95,10 +97,14 @@ class DetectorService:
     
     def _get_model_path(self, model_file: str) -> str:
         """Cari path file model: bundel PyInstaller, CWD, dir proyek, subdir referensi."""
+        model_basename = os.path.basename(model_file)
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             bundle_path = os.path.join(sys._MEIPASS, model_file)
             if os.path.exists(bundle_path):
                 return bundle_path
+            bundle_root_path = os.path.join(sys._MEIPASS, model_basename)
+            if os.path.exists(bundle_root_path):
+                return bundle_root_path
         if os.path.exists(model_file):
             return model_file
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -106,27 +112,69 @@ class DetectorService:
         project_path = os.path.join(project_dir, model_file)
         if os.path.exists(project_path):
             return project_path
-        ref_path = os.path.join(project_dir, "YOLOv10-Fire-and-Smoke-Detection", model_file)
+        root_model_path = os.path.join(project_dir, model_basename)
+        if os.path.exists(root_model_path):
+            return root_model_path
+        ref_path = os.path.join(project_dir, "YOLO-MP-master", model_basename)
         if os.path.exists(ref_path):
             return ref_path
         print(f"Model not found locally, will attempt download: {model_file}")
         return model_file
+
+    def _get_yolo_mp_nn_path(self) -> Optional[str]:
+        """Return the local YOLO-MP ultralytics/nn folder when present."""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = os.path.dirname(os.path.dirname(script_dir))
+        nn_path = os.path.join(project_dir, "YOLO-MP-master", "ultralytics", "nn")
+        return os.path.abspath(nn_path) if os.path.isdir(nn_path) else None
+
+    def _install_yolo_mp_compat_modules(self):
+        """Make local YOLO-MP extra_modules visible to the installed Ultralytics package."""
+        import ultralytics.nn as yolo_nn
+
+        nn_path = self._get_yolo_mp_nn_path()
+        if nn_path and nn_path not in yolo_nn.__path__:
+            yolo_nn.__path__.append(nn_path)
+
+    def _allow_yolo_mp_safe_globals(self):
+        """
+        Allow PyTorch 2.6+ to load older Ultralytics checkpoints while
+        keeping weights_only=True. This is narrower than disabling checkpoint
+        safety and only permits classes from torch.nn and ultralytics.nn.
+        """
+        import torch
+        import torch.nn as torch_nn
+        from dill._dill import _load_type
+        from torch.serialization import add_safe_globals
+        import ultralytics.nn.modules as yolo_modules
+        import ultralytics.nn.tasks as yolo_tasks
+        extra_blocks = importlib.import_module("ultralytics.nn.extra_modules.block")
+
+        safe_classes = [_load_type]
+        for module in (torch_nn, yolo_modules, yolo_tasks, extra_blocks):
+            safe_classes.extend(
+                obj for _, obj in vars(module).items()
+                if inspect.isclass(obj) and obj.__module__.startswith(("torch.nn", "ultralytics.nn"))
+            )
+        add_safe_globals(safe_classes)
     
     def load_model(self, model_name: str = DEFAULT_MODEL, use_gpu: bool = False) -> bool:
-        """Muat model YOLO untuk deteksi api dan asap."""
+        """Muat model YOLO untuk deteksi api."""
         if not self._torch_available:
             return False
         try:
             from ultralytics import YOLO
-            model_file = FIRE_SMOKE_MODEL["file"]
+            self._install_yolo_mp_compat_modules()
+            self._allow_yolo_mp_safe_globals()
+            model_file = FIRE_MODEL["file"]
             model_path = self._get_model_path(model_file)
             self._model = YOLO(model_path)
             self._model.to(self._device)
-            self._model_name = FIRE_SMOKE_MODEL["name"]
+            self._model_name = FIRE_MODEL["name"]
             if hasattr(self._model, 'names'):
                 self._model_names = self._model.names
                 print(f"Model classes: {self._model_names}")
-            print(f"Loaded {self._model_name} on {self._device}")
+            print(f"Loaded {self._model_name} from {model_path} on {self._device}")
             return True
         except Exception as e:
             print(f"Error loading model: {e}")
@@ -173,22 +221,22 @@ class DetectorService:
             cv2.putText(annotated, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         return annotated
 
-    def detect_fire_smoke(self, frame: np.ndarray) -> Tuple[np.ndarray, int, int, List[Dict]]:
+    def detect_fire(self, frame: np.ndarray) -> Tuple[np.ndarray, int, List[Dict]]:
         """
-        Detect fire and smoke in a frame and annotate with bounding boxes.
+        Detect fire in a frame and annotate with bounding boxes.
         
         Returns:
-            Tuple of (annotated_frame, fire_count, smoke_count, detections)
+            Tuple of (annotated_frame, fire_count, detections)
         """
         if self._model is None:
-            return frame, 0, 0, []
+            return frame, 0, []
         
         self._frame_counter += 1
         if self._skip_frames > 1 and self._frame_counter % self._skip_frames != 1:
             if self._last_annotated_detections:
                 annotated = self._redraw_detections(frame, self._last_annotated_detections)
-                fc, sc = self._count_classes(self._last_annotated_detections)
-                return annotated, fc, sc, self._last_annotated_detections
+                fire_count = self._count_fire(self._last_annotated_detections)
+                return annotated, fire_count, self._last_annotated_detections
         
         try:
             h, w = frame.shape[:2]
@@ -214,6 +262,8 @@ class DetectorService:
                 for box in boxes:
                     cls_id = int(box.cls[0])
                     class_name = self._get_class_name(cls_id)
+                    if not self._is_fire_class(class_name):
+                        continue
                     color = self._get_class_color(class_name)
                     bx1, by1, bx2, by2 = map(float, box.xyxy[0])
                     x1, y1 = int(bx1 * scale_x), int(by1 * scale_y)
@@ -268,23 +318,24 @@ class DetectorService:
             self._trackers = current_trackers
             self._last_detections = detections
             self._last_annotated_detections = detections
-            fc, sc = self._count_classes(detections)
-            return annotated_frame, fc, sc, detections
+            return annotated_frame, self._count_fire(detections), detections
             
         except Exception as e:
             print(f"Detection error: {e}")
-            return frame, 0, 0, []
+            return frame, 0, []
     
-    def _count_classes(self, detections: List[Dict]) -> Tuple[int, int]:
-        """Count fire and smoke detections separately."""
-        fire = smoke = 0
+    def _is_fire_class(self, class_name: str) -> bool:
+        """Return True when a detection belongs to the fire class."""
+        return "fire" in class_name.lower()
+
+    def _count_fire(self, detections: List[Dict]) -> int:
+        """Count fire detections."""
+        fire = 0
         for det in detections:
             name = det.get('class_name', '').lower()
             if 'fire' in name:
                 fire += 1
-            elif 'smoke' in name:
-                smoke += 1
-        return fire, smoke
+        return fire
     
     def get_last_detections(self) -> List[Dict]:
         return self._last_detections
