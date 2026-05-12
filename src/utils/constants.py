@@ -19,9 +19,9 @@ CONFIDENCE_THRESHOLD = 0.25  # Kepercayaan minimum untuk deteksi (0.0 - 1.0)
 
 # =============================================================================
 # Model YOLO - Fire Detection
-# YOLO-MP model and compatibility modules live in YOLO-MP-master.
+# YOLO-MP model lives in models/. Compatibility modules live in src/yolo_mp_compat/.
 # =============================================================================
-YOLO_MP_DIR = "YOLO-MP-master"
+YOLO_MP_DIR = "models"
 YOLO_MP_MODEL_FILE = "YOLO-MP.pt"
 
 FIRE_MODEL = {

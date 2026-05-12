@@ -115,26 +115,37 @@ class DetectorService:
         root_model_path = os.path.join(project_dir, model_basename)
         if os.path.exists(root_model_path):
             return root_model_path
-        ref_path = os.path.join(project_dir, "YOLO-MP-master", model_basename)
-        if os.path.exists(ref_path):
-            return ref_path
         print(f"Model not found locally, will attempt download: {model_file}")
         return model_file
 
-    def _get_yolo_mp_nn_path(self) -> Optional[str]:
-        """Return the local YOLO-MP ultralytics/nn folder when present."""
+    def _get_yolo_mp_compat_path(self) -> Optional[str]:
+        """Return the app-owned YOLO-MP compatibility module folder."""
+        candidates = []
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            candidates.append(os.path.join(sys._MEIPASS, "yolo_mp_compat"))
+
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        project_dir = os.path.dirname(os.path.dirname(script_dir))
-        nn_path = os.path.join(project_dir, "YOLO-MP-master", "ultralytics", "nn")
-        return os.path.abspath(nn_path) if os.path.isdir(nn_path) else None
+        src_dir = os.path.dirname(script_dir)
+        candidates.extend([
+            os.path.join(src_dir, "yolo_mp_compat"),
+            os.path.join(os.getcwd(), "src", "yolo_mp_compat"),
+        ])
+
+        for path in candidates:
+            if os.path.isdir(os.path.join(path, "extra_modules")):
+                return os.path.abspath(path)
+        return None
 
     def _install_yolo_mp_compat_modules(self):
         """Make local YOLO-MP extra_modules visible to the installed Ultralytics package."""
         import ultralytics.nn as yolo_nn
 
-        nn_path = self._get_yolo_mp_nn_path()
-        if nn_path and nn_path not in yolo_nn.__path__:
-            yolo_nn.__path__.append(nn_path)
+        compat_path = self._get_yolo_mp_compat_path()
+        if not compat_path:
+            raise RuntimeError("Folder src/yolo_mp_compat/extra_modules tidak ditemukan.")
+
+        if compat_path not in yolo_nn.__path__:
+            yolo_nn.__path__.append(compat_path)
 
     def _allow_yolo_mp_safe_globals(self):
         """

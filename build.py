@@ -14,7 +14,8 @@ def build():
     # Project paths
     project_dir = os.path.dirname(os.path.abspath(__file__))
     src_dir = os.path.join(project_dir, "src")
-    yolo_mp_dir = os.path.join(project_dir, "YOLO-MP-master")
+    models_dir = os.path.join(project_dir, "models")
+    compat_dir = os.path.join(src_dir, "yolo_mp_compat")
     dist_dir = os.path.join(project_dir, "dist")
     build_dir = os.path.join(project_dir, "build")
     
@@ -48,19 +49,24 @@ def build():
         "--collect-data=ultralytics",
         "--collect-submodules=ultralytics",
         # Tambahkan direktori sumber ke path
-        f"--paths={yolo_mp_dir}",
         f"--paths={src_dir}",
     ]
     
     # Tambahkan model file jika ada
     model_file = "YOLO-MP.pt"
-    model_path = os.path.join(yolo_mp_dir, model_file)
+    model_path = os.path.join(models_dir, model_file)
     
     if os.path.exists(model_path):
-        cmd.append(f"--add-data={model_path};YOLO-MP-master")
+        cmd.append(f"--add-data={model_path};models")
         print(f"Including model: {model_file}")
     else:
-        print(f"WARNING: Model file {model_file} not found in YOLO-MP-master!")
+        print(f"WARNING: Model file {model_file} not found in models!")
+
+    if os.path.exists(compat_dir):
+        cmd.append(f"--add-data={compat_dir};yolo_mp_compat")
+        print("Including YOLO-MP compatibility modules")
+    else:
+        print("WARNING: YOLO-MP compatibility modules not found in src/yolo_mp_compat!")
     
     # Titik masuk (harus yang terakhir)
     cmd.append(os.path.join(src_dir, "main.py"))

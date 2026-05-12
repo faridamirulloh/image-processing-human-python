@@ -78,7 +78,7 @@ Untuk penjelasan rinci tentang basis kode dan cara kerjanya, silakan lihat [CODE
 | **"No module named..."** | Pastikan Anda mengaktifkan virtual environment (`.\venv311\Scripts\activate`). |
 | **Kamera tidak ditemukan** | Klik tombol **"R"** (Refresh). Periksa jika aplikasi lain (Zoom/Teams) sedang menggunakan kamera. |
 | **FPS Rendah / Lag** | Buka Settings (⚙️) dan aktifkan Low Spec Mode. Pastikan laptop terhubung ke daya. |
-| **Model tidak ditemukan** | Pastikan folder `YOLO-MP-master` ada dan berisi `YOLO-MP.pt`. |
+| **Model tidak ditemukan** | Pastikan file `models/YOLO-MP.pt` ada. |
 
 ## ⚖️ Lisensi
 Lisensi MIT

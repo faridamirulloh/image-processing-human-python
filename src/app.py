@@ -627,7 +627,7 @@ class MainWindow(QMainWindow):
                 "Peringatan Model AI",
                 f"Gagal memuat model {model_name}:\n\n{error}\n\n"
                 "Deteksi mungkin tidak berfungsi. "
-                "Periksa folder YOLO-MP-master dan file YOLO-MP.pt."
+                "Periksa file models/YOLO-MP.pt."
             )
     
     # =========================================================================
