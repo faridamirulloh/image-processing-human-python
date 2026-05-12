@@ -44,6 +44,7 @@ class DetectorService:
         self._last_annotated_detections: List[Dict] = []
         self._torch_available = False
         self._init_error: Optional[str] = None
+        self._safe_globals_registered = False
         
         try:
             import torch
@@ -118,6 +119,7 @@ class DetectorService:
             return False
         try:
             from ultralytics import YOLO
+            self._register_torch_safe_globals()
             model_file = FIRE_SMOKE_MODEL["file"]
             model_path = self._get_model_path(model_file)
             self._model = YOLO(model_path)
@@ -132,6 +134,39 @@ class DetectorService:
             print(f"Error loading model: {e}")
             self._init_error = str(e)
             return False
+
+    def _register_torch_safe_globals(self):
+        """
+        PyTorch >=2.6 default torch.load(weights_only=True) membutuhkan allowlist
+        untuk class custom dalam checkpoint Ultralytics.
+        """
+        if self._safe_globals_registered:
+            return
+        try:
+            import torch
+            add_safe_globals = getattr(torch.serialization, "add_safe_globals", None)
+            if add_safe_globals is None:
+                self._safe_globals_registered = True
+                return
+
+            from ultralytics.nn.tasks import (
+                DetectionModel,
+                SegmentationModel,
+                PoseModel,
+                ClassificationModel,
+                OBBModel,
+            )
+            add_safe_globals([
+                DetectionModel,
+                SegmentationModel,
+                PoseModel,
+                ClassificationModel,
+                OBBModel,
+            ])
+            self._safe_globals_registered = True
+        except Exception as e:
+            # Non-fatal: fallback ke perilaku default bila registrasi gagal.
+            print(f"Warning: failed to register torch safe globals: {e}")
     
     def _get_class_name(self, cls_id: int) -> str:
         if self._model_names and cls_id in self._model_names:
