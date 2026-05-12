@@ -1,15 +1,15 @@
-# 📷 Aplikasi Deteksi & Penghitungan Manusia
+# 🔥 Aplikasi Deteksi Api & Asap
 
-Aplikasi desktop Windows berkinerja tinggi untuk deteksi dan penghitungan manusia secara real-time menggunakan model YOLO (v8, v11, v12).
+Aplikasi desktop Windows berkinerja tinggi untuk deteksi api dan asap secara real-time menggunakan model YOLOv10 kustom.
 
 ![Ikon Aplikasi](src/assets/icon.png)
 
 ## ✨ Fitur
 
-- **Deteksi Real-time**: Mendeteksi manusia dengan akurasi tinggi menggunakan model YOLO.
+- **Deteksi Real-time**: Mendeteksi api dan asap dengan akurasi tinggi menggunakan model YOLOv10 kustom.
 - **Dukungan Banyak Kamera**: Memindai dan mencantumkan semua webcam yang terhubung secara otomatis.
 - **Perekaman & Snapshot**: Rekam klip video (`.mp4`) atau ambil tangkapan layar (`.png`) dengan satu klik.
-- **Statistik Langsung**: Menampilkan FPS, jumlah orang, dan info model aktif secara real-time.
+- **Statistik Langsung**: Menampilkan FPS, jumlah api/asap terdeteksi, dan info model aktif secara real-time.
 - **Dioptimalkan untuk CPU**: Dirancang untuk berjalan secara efisien pada CPU standar tanpa memerlukan GPU khusus.
 
 ## 🚀 Mulai Cepat
@@ -33,13 +33,13 @@ Jika Anda lebih suka mengatur secara manual:
 
 1.  **Buat Virtual Environment**:
     ```powershell
-    py -3.11 -m venv venv311 ## untuk menginisiasi virtual environment, program akan menggunakan python 3.11 dan menginstall semua dependensi yang dibutuhkan di dalam folder venv311, sehingga tidak akan mengganggu environment python yang sudah terinstall di sistem
+    py -3.11 -m venv venv311 ## untuk menginisiasi virtual environment
     .\venv311\Scripts\activate ## untuk mengaktifkan virtual environment
     ```
 
 2.  **Instal Dependensi**:
     ```powershell
-    pip install -r requirements.txt ## untuk menginstall semua dependensi yang dibutuhkan, 
+    pip install -r requirements.txt
     ```
 
 3.  **Jalankan Aplikasi**:
@@ -50,11 +50,8 @@ Jika Anda lebih suka mengatur secara manual:
 ## 🖥️ Panduan Penggunaan
 
 1.  **Pilih Kamera**: Gunakan daftar drop-down untuk memilih kamera input Anda.
-2.  **Pilih Model**:
-    *   **Nano (n)**: Tercepat, direkomendasikan untuk sebagian besar PC.
-    *   **Kecil (s)**: Lebih akurat, tetapi membutuhkan CPU yang kuat.
-3.  **Kontrol**:
-    *   **Mulai**: Memulai deteksi AI.
+2.  **Kontrol**:
+    *   **Mulai**: Memulai deteksi AI (api & asap).
     *   **Berhenti**: Menjeda deteksi (pratinjau kamera tetap aktif).
     *   **Rekam**: Mengalihkan perekaman video ke folder output.
     *   **Ikon Folder**: Membuka direktori tempat rekaman disimpan.
@@ -68,7 +65,7 @@ Untuk membuat file `.exe` mandiri agar mudah didistribusikan:
 .\venv311\Scripts\python.exe build.py
 ```
 
-File output `HumanDetectionApp.exe` akan muncul di folder `dist`.
+File output `FireSmokeDetectionApp.exe` akan muncul di folder `dist`.
 
 ## 📁 Struktur Proyek
 
@@ -80,7 +77,8 @@ Untuk penjelasan rinci tentang basis kode dan cara kerjanya, silakan lihat [CODE
 |-------|----------|
 | **"No module named..."** | Pastikan Anda mengaktifkan virtual environment (`.\venv311\Scripts\activate`). |
 | **Kamera tidak ditemukan** | Klik tombol **"R"** (Refresh). Periksa jika aplikasi lain (Zoom/Teams) sedang menggunakan kamera. |
-| **FPS Rendah / Lag** | Beralih ke model **Nano** (misalnya, `YOLOv8n`). Pastikan laptop Anda terhubung ke daya. |
+| **FPS Rendah / Lag** | Buka Settings (⚙️) dan aktifkan Low Spec Mode. Pastikan laptop terhubung ke daya. |
+| **Model tidak ditemukan** | Pastikan file `best.pt` ada di direktori root proyek. |
 
 ## ⚖️ Lisensi
 Lisensi MIT

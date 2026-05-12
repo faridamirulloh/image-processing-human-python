@@ -1,6 +1,6 @@
 """
-Layanan Detektor - Deteksi Manusia YOLO
-Menyediakan deteksi orang berbasis AI menggunakan model YOLO (v8, v11, v12).
+Layanan Detektor - Deteksi Api dan Asap YOLO
+Menyediakan deteksi api dan asap berbasis AI menggunakan model YOLOv10 kustom.
 Inferensi hanya CPU — dioptimalkan untuk menggunakan semua core CPU.
 """
 
@@ -11,63 +11,40 @@ import numpy as np
 from typing import Tuple, List, Dict, Optional
 
 from utils.constants import (
-    YOLO_MODELS, 
-    DEFAULT_MODEL, 
-    CONFIDENCE_THRESHOLD, 
-    PERSON_CLASS_ID,
-    DETECTION_BOX_COLOR,
+    FIRE_SMOKE_MODEL,
+    DEFAULT_MODEL,
+    CONFIDENCE_THRESHOLD,
+    DETECTION_CLASS_COLORS,
+    DETECTION_DEFAULT_COLOR,
     INFERENCE_SCALE,
     SKIP_FRAMES_DEFAULT
 )
 
 import time
 
-# Confidence update interval in seconds (stabilizes UI flicker)
-# Interval pembaruan deteksi dalam detik (menstabilkan UI)
 CONFIDENCE_UPDATE_INTERVAL = 0.25
-
-# Faktor penghalusan kotak pembatas (0.0 - 1.0)
-# Lebih rendah = lebih halus/lambat, Lebih tinggi = lebih cepat/gugup
 BOX_SMOOTHING_FACTOR = 0.3
 
 
 class DetectorService:
-    """
-    Layanan deteksi manusia menggunakan model YOLO.
-    Menangani pemuatan model, inferensi, dan anotasi hasil.
-    """
+    """Layanan deteksi api dan asap menggunakan model YOLOv10 kustom."""
     
     def __init__(self, model_name: str = DEFAULT_MODEL, use_gpu: bool = False):
-        """
-        Inisialisasi layanan detektor.
-        
-        Args:
-            model_name: Name of the model from YOLO_MODELS
-            use_gpu: Ignored (CPU-only mode)
-        """
         self._model = None
         self._model_name: str = model_name
+        self._model_names: Dict[int, str] = {}
         self._device: str = "cpu"
         self._confidence: float = CONFIDENCE_THRESHOLD
         self._last_detections: List[Dict] = []
-        
-        # Pelacakan untuk stabilisasi kepercayaan
-        # format: {track_id: {'conf': float, 'last_update': float, 'bbox': tuple}}
         self._trackers = {}
         self._next_track_id = 0
-        
-        # Performance: inference downscaling
         self._inference_scale: float = INFERENCE_SCALE
-        
-        # Performance: skip-frame detection
         self._skip_frames: int = SKIP_FRAMES_DEFAULT
         self._frame_counter: int = 0
-        self._last_annotated_detections: List[Dict] = []  # cached detections for redraw
-        
+        self._last_annotated_detections: List[Dict] = []
         self._torch_available = False
         self._init_error: Optional[str] = None
         
-        # Periksa apakah PyTorch tersedia
         try:
             import torch
             self._torch_available = True
@@ -75,412 +52,251 @@ class DetectorService:
             self._init_error = str(e)
             print(f"Warning: PyTorch not available: {e}")
         
-        # Optimalkan CPU (non-fatal — jangan gagalkan pemuatan model)
         if self._torch_available:
             try:
                 self._optimize_cpu()
             except Exception as e:
                 print(f"Warning: CPU optimization failed (non-fatal): {e}")
         
-        # Aktifkan optimisasi OpenCV (SSE, AVX, dll)
         cv2.setUseOptimized(True)
         
-        # Muat model jika PyTorch tersedia
         if self._torch_available:
             self.load_model(model_name)
     
     def _optimize_cpu(self):
-        """
-        Optimalkan penggunaan CPU secara dinamis berdasarkan perangkat.
-        - Perangkat kuat (8+ core): gunakan semua core
-        - Perangkat sedang (4-7 core): sisakan 1 core untuk UI
-        - Perangkat lemah (1-3 core): sisakan 1 core untuk UI
-        """
+        """Optimalkan penggunaan CPU secara dinamis berdasarkan perangkat."""
         import torch
-        
         total_cores = os.cpu_count() or 2
-        
-        # Tentukan jumlah thread optimal berdasarkan jumlah core
         if total_cores >= 8:
-            # Perangkat kuat — gunakan semua core, UI tetap lancar
             infer_threads = total_cores
         elif total_cores >= 4:
-            # Perangkat sedang — sisakan 1 core untuk UI + kamera
             infer_threads = total_cores - 1
         else:
-            # Perangkat lemah — minimal 1 thread untuk inferensi
             infer_threads = max(1, total_cores - 1)
-        
-        # Terapkan konfigurasi thread PyTorch
         torch.set_num_threads(infer_threads)
-        
         try:
-            interop = max(1, total_cores // 4)  # 1 interop thread per 4 core
+            interop = max(1, total_cores // 4)
             torch.set_num_interop_threads(interop)
         except RuntimeError:
-            pass  # Sudah diatur sebelumnya
-        
-        print(
-            f"CPU optimization: {infer_threads}/{total_cores} cores for inference, "
-            f"torch threads={torch.get_num_threads()}"
-        )
+            pass
+        print(f"CPU optimization: {infer_threads}/{total_cores} cores, torch threads={torch.get_num_threads()}")
     
     @property
     def torch_available(self) -> bool:
-        """Periksa apakah PyTorch tersedia"""
         return self._torch_available
     
     @property
     def init_error(self) -> Optional[str]:
-        """Cek kesalahan inisialisasi jika ada"""
         return self._init_error
     
     @property
     def current_model(self) -> str:
-        """Cek nama model saat ini"""
         return self._model_name
     
     def _get_model_path(self, model_file: str) -> str:
-        """
-        Cari path file model.
-        Periksa secara berurutan: bundel PyInstaller, dir saat ini, dir proyek.
-        Kembali ke nama file asli (ultralytics akan mengunduh).
-        
-        Args:
-            model_file: Model filename (e.g., 'yolov8n.pt')
-            
-        Returns:
-            Full path to the model file
-        """
-        # Periksa bundel PyInstaller terlebih dahulu (untuk .exe yang dipaketkan)
+        """Cari path file model: bundel PyInstaller, CWD, dir proyek, subdir referensi."""
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             bundle_path = os.path.join(sys._MEIPASS, model_file)
             if os.path.exists(bundle_path):
-                print(f"Using bundled model: {bundle_path}")
                 return bundle_path
-        
-        # Periksa direktori kerja saat ini
         if os.path.exists(model_file):
             return model_file
-        
-        # Periksa direktori proyek (dua tingkat di atas file ini)
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = os.path.dirname(os.path.dirname(script_dir))
         project_path = os.path.join(project_dir, model_file)
         if os.path.exists(project_path):
             return project_path
-        
-        # Model tidak ditemukan secara lokal - ultralytics akan mengunduhnya
+        ref_path = os.path.join(project_dir, "YOLOv10-Fire-and-Smoke-Detection", model_file)
+        if os.path.exists(ref_path):
+            return ref_path
         print(f"Model not found locally, will attempt download: {model_file}")
         return model_file
     
-    def load_model(self, model_name: str, use_gpu: bool = False) -> bool:
-        """
-        Muat model YOLO.
-        
-        Args:
-            model_name: Name of the model from YOLO_MODELS
-            use_gpu: Ignored (CPU-only mode)
-            
-        Returns:
-            True if model loaded successfully
-        """
+    def load_model(self, model_name: str = DEFAULT_MODEL, use_gpu: bool = False) -> bool:
+        """Muat model YOLO untuk deteksi api dan asap."""
         if not self._torch_available:
             return False
-            
         try:
             from ultralytics import YOLO
-            
-            # Validasi nama model
-            if model_name not in YOLO_MODELS:
-                print(f"Unknown model: {model_name}, using default")
-                model_name = DEFAULT_MODEL
-            
-            model_file = YOLO_MODELS[model_name]["file"]
+            model_file = FIRE_SMOKE_MODEL["file"]
             model_path = self._get_model_path(model_file)
-            
-            # Muat model di CPU
             self._model = YOLO(model_path)
             self._model.to(self._device)
-            self._model_name = model_name
-            
-            print(f"Loaded {model_name} on {self._device}")
+            self._model_name = FIRE_SMOKE_MODEL["name"]
+            if hasattr(self._model, 'names'):
+                self._model_names = self._model.names
+                print(f"Model classes: {self._model_names}")
+            print(f"Loaded {self._model_name} on {self._device}")
             return True
-            
         except Exception as e:
             print(f"Error loading model: {e}")
             self._init_error = str(e)
             return False
     
+    def _get_class_name(self, cls_id: int) -> str:
+        if self._model_names and cls_id in self._model_names:
+            return self._model_names[cls_id]
+        return f"class_{cls_id}"
+    
+    def _get_class_color(self, class_name: str) -> Tuple[int, int, int]:
+        name_lower = class_name.lower()
+        for key, color in DETECTION_CLASS_COLORS.items():
+            if key in name_lower:
+                return color
+        return DETECTION_DEFAULT_COLOR
+    
     def set_inference_scale(self, scale: float):
-        """
-        Set the inference downscale factor.
-        Lower values = faster inference but less accurate detection.
-        
-        Args:
-            scale: Scale factor (0.25, 0.5, 0.75, or 1.0)
-        """
         self._inference_scale = max(0.25, min(scale, 1.0))
     
     def get_inference_scale(self) -> float:
-        """Get the current inference scale factor."""
         return self._inference_scale
     
     def set_skip_frames(self, n: int):
-        """
-        Set how many frames to skip between YOLO inferences.
-        On skipped frames, the last detection results are redrawn.
-        
-        Args:
-            n: Run inference every Nth frame (1 = every frame, 2 = every other, etc.)
-        """
         self._skip_frames = max(1, min(n, 10))
         self._frame_counter = 0
     
     def get_skip_frames(self) -> int:
-        """Get the current skip-frame interval."""
         return self._skip_frames
     
     def _redraw_detections(self, frame: np.ndarray, detections: List[Dict]) -> np.ndarray:
-        """
-        Redraw cached detection bounding boxes on a new frame.
-        Used for skip-frame mode to avoid re-running YOLO.
-        
-        Args:
-            frame: Current raw frame
-            detections: Cached detection results
-            
-        Returns:
-            Frame with bounding boxes drawn
-        """
+        """Redraw cached detection bounding boxes on a new frame."""
         annotated = frame.copy()
         for det in detections:
             x1, y1, x2, y2 = det['bbox']
             conf = det['confidence']
-            
-            cv2.rectangle(annotated, (x1, y1), (x2, y2), DETECTION_BOX_COLOR, 2)
-            
-            label = f"Person {conf * 100:.0f}%"
+            class_name = det.get('class_name', 'unknown')
+            color = self._get_class_color(class_name)
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+            label = f"{class_name.capitalize()} {conf * 100:.0f}%"
             label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-            cv2.rectangle(annotated, (x1, y1 - label_size[1] - 10), (x1 + label_size[0], y1), DETECTION_BOX_COLOR, -1)
-            cv2.putText(annotated, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-        
+            cv2.rectangle(annotated, (x1, y1 - label_size[1] - 10), (x1 + label_size[0], y1), color, -1)
+            cv2.putText(annotated, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         return annotated
 
-    def detect_humans(self, frame: np.ndarray) -> Tuple[np.ndarray, int, List[Dict]]:
+    def detect_fire_smoke(self, frame: np.ndarray) -> Tuple[np.ndarray, int, int, List[Dict]]:
         """
-        Detect humans in a frame and annotate with bounding boxes.
-        Supports inference downscaling and skip-frame mode for performance.
+        Detect fire and smoke in a frame and annotate with bounding boxes.
         
-        Args:
-            frame: Input frame (BGR format from OpenCV)
-            
         Returns:
-            Tuple of (annotated_frame, person_count, detections)
-            - annotated_frame: Frame with drawn bounding boxes
-            - person_count: Number of people detected
-            - detections: List of detection dicts with bbox, confidence
+            Tuple of (annotated_frame, fire_count, smoke_count, detections)
         """
         if self._model is None:
-            return frame, 0, []
+            return frame, 0, 0, []
         
-        # Skip-frame logic: reuse cached detections on non-inference frames
         self._frame_counter += 1
         if self._skip_frames > 1 and self._frame_counter % self._skip_frames != 1:
             if self._last_annotated_detections:
                 annotated = self._redraw_detections(frame, self._last_annotated_detections)
-                return annotated, len(self._last_annotated_detections), self._last_annotated_detections
-            # No cached results yet, fall through to run inference
+                fc, sc = self._count_classes(self._last_annotated_detections)
+                return annotated, fc, sc, self._last_annotated_detections
         
         try:
             h, w = frame.shape[:2]
-            
-            # Downscale frame for inference if scale < 1.0
             if self._inference_scale < 1.0:
                 new_w = int(w * self._inference_scale)
                 new_h = int(h * self._inference_scale)
                 inference_frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
-                scale_x = w / new_w
-                scale_y = h / new_h
+                scale_x, scale_y = w / new_w, h / new_h
             else:
                 inference_frame = frame
-                scale_x = 1.0
-                scale_y = 1.0
+                scale_x = scale_y = 1.0
             
-            # Run YOLO inference
             results = self._model(inference_frame, verbose=False, conf=self._confidence)
-            
             detections = []
             annotated_frame = frame.copy()
             current_time = time.time()
-            
-            # Daftar sementara untuk kecocokan frame saat ini
             current_trackers = {}
             
             for result in results:
                 boxes = result.boxes
                 if boxes is None:
                     continue
-                
                 for box in boxes:
                     cls_id = int(box.cls[0])
-                    
-                    # Filter hanya untuk class person
-                    if cls_id != PERSON_CLASS_ID:
-                        continue
-                        
-                    # Extract bbox and raw confidence
-                    # Scale bbox back to original resolution if downscaled
+                    class_name = self._get_class_name(cls_id)
+                    color = self._get_class_color(class_name)
                     bx1, by1, bx2, by2 = map(float, box.xyxy[0])
-                    x1 = int(bx1 * scale_x)
-                    y1 = int(by1 * scale_y)
-                    x2 = int(bx2 * scale_x)
-                    y2 = int(by2 * scale_y)
+                    x1, y1 = int(bx1 * scale_x), int(by1 * scale_y)
+                    x2, y2 = int(bx2 * scale_x), int(by2 * scale_y)
                     raw_conf = float(box.conf[0])
                     current_bbox = (x1, y1, x2, y2)
                     
-                    # Pelacakan sederhana: temukan pelacak ada yang paling cocok melalui IoU
                     best_match_id = None
-                    max_iou = 0.5  # batas IoU untuk pencocokan
-                    
+                    max_iou = 0.5
                     for tid, data in self._trackers.items():
                         iou = self._calculate_iou(current_bbox, data['bbox'])
                         if iou > max_iou:
                             max_iou = iou
                             best_match_id = tid
                     
-                    # Tentukan deteksi stabil dan haluskan bbox
                     if best_match_id is not None:
-                        # Objek yang ada ditemukan
                         tracker = self._trackers[best_match_id]
-                        
-                        # Perbarui deteksi hanya jika interval berlalu
                         if current_time - tracker['last_update'] > CONFIDENCE_UPDATE_INTERVAL:
-                            display_conf = raw_conf
-                            last_update = current_time
+                            display_conf, last_update = raw_conf, current_time
                         else:
-                            display_conf = tracker['conf']
-                            last_update = tracker['last_update']
-                        
-                        # Haluskan bbox menggunakan Exponential Moving Average (EMA)
-                        old_x1, old_y1, old_x2, old_y2 = tracker['bbox']
-                        curr_x1, curr_y1, curr_x2, curr_y2 = current_bbox
-                        
-                        smooth_x1 = old_x1 * (1 - BOX_SMOOTHING_FACTOR) + curr_x1 * BOX_SMOOTHING_FACTOR
-                        smooth_y1 = old_y1 * (1 - BOX_SMOOTHING_FACTOR) + curr_y1 * BOX_SMOOTHING_FACTOR
-                        smooth_x2 = old_x2 * (1 - BOX_SMOOTHING_FACTOR) + curr_x2 * BOX_SMOOTHING_FACTOR
-                        smooth_y2 = old_y2 * (1 - BOX_SMOOTHING_FACTOR) + curr_y2 * BOX_SMOOTHING_FACTOR
-                        
-                        final_bbox = (smooth_x1, smooth_y1, smooth_x2, smooth_y2)
-                            
-                        # Perbarui pelacak
+                            display_conf, last_update = tracker['conf'], tracker['last_update']
+                        old = tracker['bbox']
+                        s = BOX_SMOOTHING_FACTOR
+                        final_bbox = (
+                            old[0]*(1-s)+x1*s, old[1]*(1-s)+y1*s,
+                            old[2]*(1-s)+x2*s, old[3]*(1-s)+y2*s
+                        )
                         current_trackers[best_match_id] = {
-                            'conf': display_conf,
-                            'last_update': last_update,
-                            'bbox': final_bbox
+                            'conf': display_conf, 'last_update': last_update,
+                            'bbox': final_bbox, 'class_name': class_name
                         }
                     else:
-                        # Objek baru terdeteksi - gunakan nilai mentah
                         self._next_track_id += 1
                         display_conf = raw_conf
-                        final_bbox = tuple(map(float, current_bbox)) # Simpan sebagai float untuk penghalusan
-                        
+                        final_bbox = tuple(map(float, current_bbox))
                         current_trackers[self._next_track_id] = {
-                            'conf': display_conf,
-                            'last_update': current_time,
-                            'bbox': final_bbox
+                            'conf': display_conf, 'last_update': current_time,
+                            'bbox': final_bbox, 'class_name': class_name
                         }
                     
-                    # Konversi bbox yang dihaluskan ke int untuk menggambar
-                    draw_x1, draw_y1, draw_x2, draw_y2 = map(int, final_bbox)
-                    
+                    dx1, dy1, dx2, dy2 = map(int, final_bbox)
                     detections.append({
-                        'bbox': (draw_x1, draw_y1, draw_x2, draw_y2),
-                        'confidence': display_conf,
-                        'class_id': cls_id
+                        'bbox': (dx1, dy1, dx2, dy2), 'confidence': display_conf,
+                        'class_id': cls_id, 'class_name': class_name
                     })
-                    
-                    # Gambar kotak pembatas
-                    cv2.rectangle(
-                        annotated_frame, 
-                        (draw_x1, draw_y1), (draw_x2, draw_y2), 
-                        DETECTION_BOX_COLOR, 
-                        2
-                    )
-                    
-                    # Gambar label dengan deteksi yang distabilkan
-                    label = f"Person {display_conf * 100:.0f}%"
-                    label_size, _ = cv2.getTextSize(
-                        label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
-                    )
-                    
-                    # Latar belakang label
-                    cv2.rectangle(
-                        annotated_frame,
-                        (draw_x1, draw_y1 - label_size[1] - 10),
-                        (draw_x1 + label_size[0], draw_y1),
-                        DETECTION_BOX_COLOR,
-                        -1
-                    )
-                    
-                    # Teks label
-                    cv2.putText(
-                        annotated_frame, label,
-                        (draw_x1, draw_y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6,
-                        (0, 0, 0), 2
-                    )
+                    cv2.rectangle(annotated_frame, (dx1, dy1), (dx2, dy2), color, 2)
+                    label = f"{class_name.capitalize()} {display_conf * 100:.0f}%"
+                    ls, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                    cv2.rectangle(annotated_frame, (dx1, dy1 - ls[1] - 10), (dx1 + ls[0], dy1), color, -1)
+                    cv2.putText(annotated_frame, label, (dx1, dy1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             
-            # Perbarui daftar pelacak (hapus objek yang hilang)
             self._trackers = current_trackers
             self._last_detections = detections
-            self._last_annotated_detections = detections  # Cache for skip-frame redraw
-            
-            return annotated_frame, len(detections), detections
+            self._last_annotated_detections = detections
+            fc, sc = self._count_classes(detections)
+            return annotated_frame, fc, sc, detections
             
         except Exception as e:
             print(f"Detection error: {e}")
-            return frame, 0, []
+            return frame, 0, 0, []
+    
+    def _count_classes(self, detections: List[Dict]) -> Tuple[int, int]:
+        """Count fire and smoke detections separately."""
+        fire = smoke = 0
+        for det in detections:
+            name = det.get('class_name', '').lower()
+            if 'fire' in name:
+                fire += 1
+            elif 'smoke' in name:
+                smoke += 1
+        return fire, smoke
     
     def get_last_detections(self) -> List[Dict]:
-        """Dapatkan hasil deteksi terakhir"""
         return self._last_detections
     
     def set_confidence(self, confidence: float):
-        """Tetapkan ambang kepercayaan deteksi (0.1 hingga 1.0)"""
         self._confidence = max(0.1, min(confidence, 1.0))
 
-    def _calculate_iou(self, box1: Tuple[float, float, float, float], box2: Tuple[float, float, float, float]) -> float:
-        """
-        Hitung Intersection over Union (IoU) antara dua kotak pembatas.
-        
-        Args:
-            box1: (x1, y1, x2, y2)
-            box2: (x1, y1, x2, y2)
-            
-        Returns:
-            IoU value between 0.0 and 1.0
-        """
+    def _calculate_iou(self, box1, box2) -> float:
         x1_min, y1_min, x1_max, y1_max = box1
         x2_min, y2_min, x2_max, y2_max = box2
-        
-        # Hitung koordinat persimpangan
-        xi_min = max(x1_min, x2_min)
-        yi_min = max(y1_min, y2_min)
-        xi_max = min(x1_max, x2_max)
-        yi_max = min(y1_max, y2_max)
-        
-        # Hitung area persimpangan
-        inter_width = max(0, xi_max - xi_min)
-        inter_height = max(0, yi_max - yi_min)
-        inter_area = inter_width * inter_height
-        
-        # Hitung area penyatuan
-        box1_area = (x1_max - x1_min) * (y1_max - y1_min)
-        box2_area = (x2_max - x2_min) * (y2_max - y2_min)
-        union_area = box1_area + box2_area - inter_area
-        
-        if union_area == 0:
-            return 0.0
-            
-        return inter_area / union_area
+        xi_min, yi_min = max(x1_min, x2_min), max(y1_min, y2_min)
+        xi_max, yi_max = min(x1_max, x2_max), min(y1_max, y2_max)
+        inter_area = max(0, xi_max - xi_min) * max(0, yi_max - yi_min)
+        union_area = (x1_max-x1_min)*(y1_max-y1_min) + (x2_max-x2_min)*(y2_max-y2_min) - inter_area
+        return inter_area / union_area if union_area else 0.0

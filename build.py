@@ -33,7 +33,7 @@ def build():
     # Konstruksi perintah PyInstaller
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--name=HumanDetectionApp",
+        "--name=FireSmokeDetectionApp",
         "--onefile",
         "--windowed",
         "--noconfirm",
@@ -49,21 +49,18 @@ def build():
         f"--paths={src_dir}",
     ]
     
-    # Tambahkan file model YOLO jika ada (hanya nano dan small untuk ukuran)
-    model_files = [
-        "yolov8n.pt", "yolov8s.pt",
-        "yolo11n.pt", "yolo11s.pt", 
-        "yolo12n.pt", "yolo12s.pt"
-    ]
+    # Tambahkan model file jika ada
+    model_file = "best.pt"
+    model_path = os.path.join(project_dir, model_file)
+    if not os.path.exists(model_path):
+        # Periksa di subdirektori referensi
+        model_path = os.path.join(project_dir, "YOLOv10-Fire-and-Smoke-Detection", model_file)
     
-    included_models = []
-    for model_file in model_files:
-        model_path = os.path.join(project_dir, model_file)
-        if os.path.exists(model_path):
-            # Tambahkan model ke data yang dibundel (sumber;tujuan)
-            cmd.append(f"--add-data={model_path};.")
-            included_models.append(model_file)
-            print(f"Including model: {model_file}")
+    if os.path.exists(model_path):
+        cmd.append(f"--add-data={model_path};.")
+        print(f"Including model: {model_file}")
+    else:
+        print(f"WARNING: Model file {model_file} not found!")
     
     # Titik masuk (harus yang terakhir)
     cmd.append(os.path.join(src_dir, "main.py"))
@@ -83,8 +80,8 @@ def build():
         print("\n" + "="*50)
         print("BUILD SUCCESSFUL!")
         print("="*50)
-        print(f"\nExecutable created at: {os.path.join(dist_dir, 'HumanDetectionApp.exe')}")
-        print("\nNote: The first run may take longer as it downloads the YOLO model.")
+        print(f"\nExecutable created at: {os.path.join(dist_dir, 'FireSmokeDetectionApp.exe')}")
+        print("\nNote: The first run may take longer as it initializes the model.")
     else:
         print("\n" + "="*50)
         print("BUILD FAILED!")

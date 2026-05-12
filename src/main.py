@@ -1,5 +1,5 @@
 """
-Aplikasi Deteksi Manusia - Entry Point
+Aplikasi Deteksi Api & Asap - Entry Point
 Menangani inisialisasi aplikasi, optimisasi CPU, dan error startup.
 """
 
@@ -84,8 +84,8 @@ def main():
     
     # Buat aplikasi
     app = QApplication(sys.argv)
-    app.setApplicationName("Human Detection App")
-    app.setOrganizationName("HumanDetection")
+    app.setApplicationName("Fire & Smoke Detection App")
+    app.setOrganizationName("FireSmokeDetection")
     
     # Optimalkan CPU: prioritas tinggi + semua core
     _boost_process_priority()
@@ -109,7 +109,7 @@ def main():
         
         QMessageBox.critical(
             None,
-            "Error - Human Detection App",
+            "Error - Fire & Smoke Detection App",
             f"Aplikasi gagal dimulai:\n\n{e}\n\n"
             "Pastikan semua dependensi terinstall:\n"
             "  pip install -r requirements.txt"

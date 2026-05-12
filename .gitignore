@@ -21,7 +21,6 @@ dist/
 .idea/
 
 # Large Model Files (YOLO)
-*.pt
 *.onnx
 
 # OS Files

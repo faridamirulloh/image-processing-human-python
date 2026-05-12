@@ -1,6 +1,6 @@
 """
 Aplikasi Utama
-Deteksi dan penghitungan orang secara real-time menggunakan model YOLO.
+Deteksi api dan asap secara real-time menggunakan model YOLOv10 kustom.
 Menangani tata letak UI, manajemen kamera, perekaman, dan proses deteksi.
 """
 
@@ -21,7 +21,7 @@ from PyQt5.QtGui import QFont, QIcon
 from services import CameraService, VideoService, DetectorService, RecordingService
 from widgets import VideoWidget, StatsWidget
 from utils.constants import (
-    WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT, YOLO_MODELS,
+    WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT,
     DEFAULT_CAPTURE_FPS, MIN_FPS, MAX_FPS
 )
 from utils import styles
@@ -32,7 +32,7 @@ from utils import styles
 # =============================================================================
 
 class ModelLoaderThread(QThread):
-    """Thread latar belakang untuk memuat model YOLO tanpa memblokir UI."""
+    """Thread latar belakang untuk memuat model deteksi api/asap tanpa memblokir UI."""
     
     # Signal: (success: bool, model_name: str, error: str)
     model_loaded = pyqtSignal(bool, str, str)
@@ -83,13 +83,13 @@ class SettingsDialog(QDialog):
         layout.addWidget(title)
         
         # === FPS Group ===
-        fps_group = QGroupBox("Frame Rate")
+        fps_group = QGroupBox("Detection Rate")
         fps_layout = QVBoxLayout(fps_group)
         fps_layout.setSpacing(8)
         
         # FPS Slider
         slider_row = QHBoxLayout()
-        slider_label = QLabel("Target FPS:")
+        slider_label = QLabel("Detection FPS:")
         slider_row.addWidget(slider_label)
         
         self._fps_slider = QSlider(Qt.Horizontal)
@@ -113,7 +113,7 @@ class SettingsDialog(QDialog):
         preset_label.setStyleSheet("color: #8b8b8b; font-size: 11px;")
         preset_row.addWidget(preset_label)
         
-        for name, value in [("5", 5), ("10", 10), ("15", 15), ("20", 20), ("30", 30)]:
+        for name, value in [("1", 1), ("5", 5), ("10", 10), ("15", 15), ("30", 30)]:
             btn = QPushButton(name)
             btn.setFixedSize(36, 26)
             btn.setStyleSheet(styles.get_icon_button_style("#2d2d44", "#00d9ff"))
@@ -280,7 +280,7 @@ class SettingsDialog(QDialog):
 # =============================================================================
 
 class MainWindow(QMainWindow):
-    """Aplikasi utama dengan pratinjau kamera, deteksi AI, dan perekaman."""
+    """Aplikasi utama deteksi api & asap dengan pratinjau kamera dan perekaman."""
     
     def __init__(self):
         super().__init__()
@@ -321,7 +321,8 @@ class MainWindow(QMainWindow):
         # YOLO runs at target FPS, cached boxes redrawn on other frames
         self._last_detection_time = 0.0
         self._cached_detections = []    # Last YOLO results for redraw
-        self._cached_person_count = 0
+        self._cached_fire_count = 0
+        self._cached_smoke_count = 0
         
         # Inisiasi UI, hubungkan sinyal, pindai kamera, dan load model AI
         self._init_ui()
@@ -447,7 +448,7 @@ class MainWindow(QMainWindow):
         return control_bar
 
     def _create_camera_controls(self, parent_layout: QHBoxLayout):
-        """Tambahkan dropdown kamera dan model ke tata letak."""
+        """Tambahkan dropdown kamera ke tata letak."""
         # Dropdown kamera
         camera_layout = QHBoxLayout()
         camera_layout.setSpacing(5)
@@ -461,49 +462,6 @@ class MainWindow(QMainWindow):
         camera_layout.addWidget(camera_label)
         camera_layout.addWidget(self._camera_combo)
         parent_layout.addLayout(camera_layout)
-        
-        # Dropdown model AI
-        model_layout = QHBoxLayout()
-        model_layout.setSpacing(5)
-        model_label = QLabel("🧠")
-        model_label.setStyleSheet("color: #ffffff; font-size: 14px;")
-        
-        self._model_combo = QComboBox()
-        self._model_combo.setMinimumWidth(150)
-        self._model_combo.setStyleSheet(styles.get_combo_style())
-        
-        # Isi dengan model YOLO yang tersedia
-        for model_name, info in YOLO_MODELS.items():
-            self._model_combo.addItem(model_name)
-            self._model_combo.setItemData(
-                self._model_combo.count() - 1, 
-                info['description'], 
-                Qt.ToolTipRole
-            )
-        
-        model_layout.addWidget(model_label)
-        model_layout.addWidget(self._model_combo)
-        parent_layout.addLayout(model_layout)
-        
-        # Dropdown mode pemrosesan
-        # mode_layout = QHBoxLayout()
-        # mode_layout.setSpacing(5)
-        # mode_label = QLabel("⚡")
-        # mode_label.setStyleSheet("color: #ffffff; font-size: 14px;")
-        
-        # self._mode_combo = QComboBox()
-        # self._mode_combo.setMinimumWidth(120)
-        # self._mode_combo.setStyleSheet(styles.get_combo_style())
-        # self._mode_combo.addItem("Streaming")
-        # self._mode_combo.addItem("Low-Specs")
-        # self._mode_combo.setToolTip(
-        #     "Streaming: Process every frame (high CPU usage)\n"
-        #     "Low-Specs: Capture → Detect → Display → Repeat (low CPU usage)"
-        # )
-        
-        # mode_layout.addWidget(mode_label)
-        # mode_layout.addWidget(self._mode_combo)
-        # parent_layout.addLayout(mode_layout)
 
     def _create_recording_controls(self, parent_layout: QHBoxLayout):
         """Tambahkan tombol folder, tangkapan layar, dan rekam ke tata letak."""
@@ -539,8 +497,6 @@ class MainWindow(QMainWindow):
         self._stop_btn.clicked.connect(self._on_stop)
         self._refresh_btn.clicked.connect(self._refresh_cameras)
         self._camera_combo.currentIndexChanged.connect(self._on_camera_changed)
-        self._model_combo.currentTextChanged.connect(self._on_model_changed)
-        # self._mode_combo.currentTextChanged.connect(self._on_mode_changed)
         self._settings_btn.clicked.connect(self._on_settings_open)
         
         # Tombol rekam & screenshot
@@ -628,39 +584,19 @@ class MainWindow(QMainWindow):
     # Pemuatan Model (non-blocking via thread)
     # =========================================================================
     
-    def _on_model_changed(self, model_name: str):
-        """Ganti model AI. Peringatkan pengguna jika memilih varian yang lebih berat."""
-        model_lower = model_name.lower()
-        is_heavy = '- balanced' in model_lower or 's -' in model_lower
-        
-        if is_heavy:
-            QMessageBox.warning(
-                self,
-                "Peringatan Performance",
-                f"⚠️ {model_name} adalah model yang lebih berat.\n\n"
-                "Ini dapat mengakibatkan kinerja yang lebih lambat pada CPU.\n"
-                "Untuk hasil terbaik, gunakan model 'Fast' (nano)."
-            )
-        
-        # Tukar model di thread latar belakang jika detektor sudah dimuat
-        if self._detector_service is not None:
-            self._load_model_async(model_name)
-    
     def _preload_model(self):
         """Load model AI di thread latar belakang saat startup."""
         if self._detector_service is None:
-            model_name = self._model_combo.currentText()
-            self._load_model_async(model_name)
+            self._load_model_async("YOLOv10 Fire & Smoke")
     
     def _load_model_async(self, model_name: str):
-        """Muat model YOLO di thread latar belakang (tidak memblokir UI)."""
+        """Muat model deteksi api/asap di thread latar belakang."""
         if self._is_loading_model:
             self._status_bar.showMessage("⏳ Model masih dimuat, harap tunggu...")
             return
         
         self._is_loading_model = True
         self._start_btn.setEnabled(False)
-        self._model_combo.setEnabled(False)
         self._status_bar.showMessage(f"⏳ Loading AI model: {model_name}...")
         
         self._model_loader_thread = ModelLoaderThread(model_name, self)
@@ -670,7 +606,6 @@ class MainWindow(QMainWindow):
     def _on_model_loaded(self, success: bool, model_name: str, error: str):
         """Tangani hasil pemuatan model dari thread latar belakang."""
         self._is_loading_model = False
-        self._model_combo.setEnabled(True)
         
         if success and self._model_loader_thread:
             self._detector_service = self._model_loader_thread.detector_service
@@ -692,7 +627,7 @@ class MainWindow(QMainWindow):
                 "Peringatan Model AI",
                 f"Gagal memuat model {model_name}:\n\n{error}\n\n"
                 "Deteksi mungkin tidak berfungsi. "
-                "Coba pilih model lain atau periksa file model."
+                "Periksa file model best.pt."
             )
     
     # =========================================================================
@@ -748,7 +683,7 @@ class MainWindow(QMainWindow):
         
         # Muat model AI jika belum dimuat sebelumnya
         if self._detector_service is None:
-            model_name = self._model_combo.currentText()
+            model_name = "YOLOv10 Fire & Smoke"
             self._status_bar.showMessage("Loading AI model...")
             
             # Coba muat secara sinkron jika belum ada sama sekali
@@ -761,7 +696,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(
                     self,
                     "Peringatan Model AI",
-                    f"Gagal memuat model {model_name}:\n\n{error}\n\n"
+                    f"Gagal memuat model:\n\n{error}\n\n"
                     "Deteksi tidak dapat dimulai."
                 )
                 return
@@ -870,12 +805,13 @@ class MainWindow(QMainWindow):
             if should_detect:
                 # Run YOLO and cache results
                 self._last_detection_time = current_time
-                annotated_frame, person_count, detections = self._detector_service.detect_humans(frame)
+                annotated_frame, fire_count, smoke_count, detections = self._detector_service.detect_fire_smoke(frame)
                 self._cached_detections = detections
-                self._cached_person_count = person_count
+                self._cached_fire_count = fire_count
+                self._cached_smoke_count = smoke_count
                 display_frame = annotated_frame
                 
-                self._stats_widget.update_person_count(person_count)
+                self._stats_widget.update_detection_counts(fire_count, smoke_count)
                 
                 # Track detection FPS
                 if self._last_frame_time > 0:
